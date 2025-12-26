@@ -20,7 +20,7 @@ It is written as an implementation plan (architecture + milestones), not as a de
 ## Non-goals (initially)
 
 - Strict global sorting across providers (concat per provider is acceptable for now).
-- Backward compatibility with existing GitHub search strings in `filters:` (users can migrate to DSL).
+- Backward compatibility with existing GitHub search strings in `filters:` (configs should migrate to DSL).
 - Perfect feature parity on day 1 (but follow-up milestones should land quickly).
 
 ---
@@ -146,6 +146,72 @@ Fields (initial candidates):
 - `updated`, `created` (time)
 - `text` (free-text; optional)
 
+### DSL grammar (v1)
+
+This is the concrete spec we should implement (and test) so translation is deterministic.
+
+Lexical:
+- Whitespace separates tokens.
+- Strings: double-quoted with `\"` and `\\` escapes.
+- Identifiers: `[a-zA-Z_][a-zA-Z0-9_]*` (e.g. `review_requested`).
+- Durations: `-?` + integer + unit in `{m,h,d,w}` (minutes/hours/days/weeks), e.g. `-7d`, `-3w`.
+- Dates: `YYYY-MM-DD` (time-of-day and offsets can be added later if needed).
+
+Grammar (EBNF-ish):
+- `expr        := or_expr`
+- `or_expr     := and_expr (("or" | "||") and_expr)*`
+- `and_expr    := unary_expr (("and" | "&&") unary_expr)*`
+- `unary_expr  := ("not" | "!") unary_expr | primary`
+- `primary     := "(" expr ")" | predicate`
+- `predicate   := ident op value | ident ("in" | "not in") list`
+- `op          := "=" | "!=" | ">" | ">=" | "<" | "<="`
+- `list        := "[" (value ("," value)*)? "]"`
+- `value       := string | boolean | number | date | duration | function`
+- `function    := "last(" duration ")"`
+
+Type system (v1):
+- `provider`: string or list[string]
+- `project`: string
+- `state`: string
+- `author` / `assignee` / `review_requested` / `involves`: string (supports `me` and `@me`)
+- `label`: string or list[string]
+- `draft` / `archived`: boolean
+- `updated` / `created`: date or duration or function `last(duration)`
+- `text`: string
+
+Normalization rules:
+- Treat `me` and `@me` as the same token.
+- Coerce `updated in last(7d)` and `updated > -7d` into canonical range predicates during normalization (e.g. `updated >= now-7d`).
+- Expand provider shorthands (e.g. `github`) into concrete provider instance ids before provider filtering.
+
+### Translation support matrix (v1)
+
+We should keep a living matrix in code/docs to prevent accidental silent mismatches.
+
+Legend:
+- ✅ server-side (direct)
+- 🟡 server-side (approx) + client-side refine
+- 🟠 requires enrichment call(s) per item
+- ❌ unsupported (error)
+
+| DSL predicate | GitHub | GitLab |
+|---|---:|---:|
+| `project = "path"` | ✅ | ✅ |
+| `state = open/closed` | ✅ | ✅ |
+| `state = merged` | ✅ | ✅ |
+| `author = me` | ✅ | ✅ |
+| `assignee = me` | ✅ | ✅ |
+| `review_requested = me` | ✅ | 🟡 |
+| `involves = me` | ✅ | 🟡 |
+| `label in ["a","b"]` | ✅ | ✅ |
+| `draft = true/false` | ✅ | ✅ |
+| `updated >= …` | ✅ | ✅ |
+| `text = "foo"` | ✅ | 🟡 |
+
+Policy:
+- If a predicate is ❌ for a provider instance, fail that provider fetch with a clear “unsupported filter” error that identifies the predicate and provider.
+- Never silently drop predicates.
+
 ### Translation notes
 
 GitHub:
@@ -191,6 +257,21 @@ Section configs remain, but `filters:` becomes DSL (no legacy GitHub strings).
 
 Repo view:
 - Determine provider instance from local `origin` remote host.
+
+### Provider instance discovery (exact rules)
+
+- GitHub instances:
+  - Discovered via `gh` auth/config (GitHub.com and any configured GHES hosts).
+  - Each host becomes a provider instance (e.g. `github:github.com`, `github:github.mycorp.com`).
+- GitLab instances:
+  - Discovered via `glab` config (`~/.config/glab-cli/config.yml`).
+  - Each host becomes a provider instance (e.g. `gitlab:gitlab.com`, `gitlab:gitlab.mycorp.com`).
+- `gh-dash` config should not store tokens; it only controls which discovered instances are enabled.
+
+Matching for `providers.include` / `providers.exclude`:
+- Exact instance id: `gitlab:gitlab.mycorp.com`
+- Wildcard by provider: `gitlab:*`, `github:*`
+- Optional provider alias: `gitlab`, `github` (expanded to `provider:*`)
 
 ---
 
@@ -265,6 +346,153 @@ Exit criteria:
 
 ---
 
+## Domain Identity & Keying (required for correctness)
+
+We must define stable identifiers to avoid collisions between providers and between GitLab IID vs internal IDs.
+
+Proposed identifiers:
+- `ProviderID`: `"<provider>:<host>"` (e.g. `github:github.com`, `gitlab:gitlab.mycorp.com`)
+- `ProjectPath`: path as seen in URLs:
+  - GitHub: `owner/repo`
+  - GitLab: `group/subgroup/repo`
+- `WorkItemKind`: `{pull_request, issue}`
+- `WorkItemNumber`:
+  - GitHub: PR number / issue number
+  - GitLab: IID (user-facing per-project number)
+- `WorkItemKey`: `{ProviderID, ProjectPath, WorkItemKind, WorkItemNumber}`
+
+Policy:
+- All caches, selection state, updates, and action routing key off `WorkItemKey`.
+- Do not use GitLab global IDs as the primary UI key.
+
+---
+
+## Capabilities Model (how we keep one UI without forcing parity)
+
+Add a `Capabilities` struct per provider instance that drives:
+- Which columns are renderable (review status, CI status, additions/deletions, etc.).
+- Which actions are enabled (and shown in help).
+- Which detail panes can show enriched data (files/checks/reviews/activity).
+
+The UI should not assume GitHub-only fields exist; it should render optional fields only when supported and present.
+
+---
+
+## Actions Mapping (v1 inventory)
+
+This list should become the definitive “built-in actions” contract, implemented provider-by-provider.
+
+PR/MR actions:
+- Open in browser
+- Comment
+- Approve
+- Close / Reopen
+- Merge
+- Assign / Unassign
+- Label add/remove
+- Mark ready / convert draft (provider-dependent; likely milestone 2)
+- Update branch (GitHub-specific; evaluate GitLab equivalent later)
+
+Issue actions:
+- Open in browser
+- Comment
+- Close / Reopen
+- Assign / Unassign
+- Label add/remove
+
+Implementation policy:
+- Prefer provider CLI (`gh`, `glab`) when it supports the action on that host.
+- Use provider API when CLI coverage is missing, using tokens from the CLI’s config source of truth.
+- If an action is unsupported for a provider, surface a clear error and disable it in help for that provider/item.
+
+---
+
+## Pagination & Ordering (multi-provider)
+
+Milestone 1: concat per provider instance.
+
+Rules:
+- Each provider fetch runs independently with its own cursor/page info.
+- “Next page” should page within a provider deterministically; avoid duplicates/skips within a provider.
+- If one provider has no more pages, others can continue paging.
+
+Grouped mode:
+- “Next page” pages the currently focused provider group.
+
+Concatenated mode:
+- “Next page” can page the provider that owns the currently selected row (simplest and predictable).
+
+---
+
+## Performance & Resiliency
+
+Concurrency:
+- Fetch providers in parallel with a configurable concurrency limit (avoid spiky rate limits).
+
+Caching:
+- Cache `me/@me` resolution per provider instance.
+- Cache GitLab project path → project ID lookups.
+- Optional short-lived list result caching per provider+DSL+limit for refresh.
+
+Failure isolation:
+- One provider failing (auth, rate limit, unsupported predicate) must not blank out other providers’ results.
+- Surface provider-scoped errors in the UI.
+
+Retries:
+- Add backoff for transient HTTP failures (429/5xx) for read operations.
+- Do not automatically retry destructive actions.
+
+---
+
+## Testing Plan
+
+DSL:
+- Unit tests for parser (precedence, quoting, list syntax, all three time syntaxes).
+- Unit tests for normalization (`me/@me`, `last()` rewrite, provider shorthand expansion).
+
+Translators:
+- Golden tests: AST → provider query (GitHub qualifiers; GitLab params).
+- “Unsupported predicate” tests per provider.
+
+Providers:
+- Fixture-driven tests using mocked HTTP servers and/or stubbed CLI runners.
+- Contract tests to ensure required domain fields are populated for UI rendering.
+
+TUI:
+- Minimal regression tests for:
+  - concatenated vs grouped rendering
+  - provider toggle keybinding
+  - action routing by `WorkItemKey`
+
+---
+
+## Migration Notes (user-facing)
+
+- `filters:` become DSL only (no legacy GitHub search strings).
+- Provide docs with examples mapping common prior filters to DSL:
+  - `is:open author:@me` → `state = open and author = me`
+  - `review-requested:@me` → `review_requested = me`
+  - `repo:owner/repo` → `project = "owner/repo"`
+
+The app should emit a clear parse error when `filters:` is not valid DSL and point to the docs.
+
+---
+
+## Custom Keybindings: Provider-Aware Template Vars
+
+Extend keybinding template inputs to include provider context so user commands can work across GitHub/GitLab:
+- `ProviderID`
+- `ProviderHost`
+- `ProviderName`
+- `ProjectPath` (unified replacement for `RepoName`)
+- `WorkItemKind` (`pr`/`issue`)
+- `WorkItemNumber` (PR number or MR IID / issue number)
+- `WorkItemURL`
+
+This also enables users to route to `gh` vs `glab` in their own commands.
+
+---
+
 ## Risks & Mitigations
 
 - **DSL expressiveness mismatch** (GitHub search vs GitLab API filters)
@@ -288,4 +516,3 @@ Exit criteria:
 - [ ] `internal/providers/gitlab`: list items + current user + actions via `glab`/API
 - [ ] `internal/tui`: section fetch refactor to multi-provider concat/grouped rendering
 - [ ] `internal/tui/keys`: global toggle for group-by-provider
-
