@@ -273,6 +273,64 @@ Matching for `providers.include` / `providers.exclude`:
 - Wildcard by provider: `gitlab:*`, `github:*`
 - Optional provider alias: `gitlab`, `github` (expanded to `provider:*`)
 
+### Provider selection semantics (intersection rules)
+
+There are three filters that can affect which provider instances a section queries:
+
+1. Discovered instances (from `gh` and `glab`).
+2. `gh-dash` config allow/deny:
+   - Start with all discovered instances.
+   - Apply `providers.include` if present/non-empty (keep only those).
+   - Apply `providers.exclude` (drop those).
+3. DSL provider scoping:
+   - If a filter expression includes `provider …`, treat it as an additional runtime filter (intersection).
+
+In other words: `effectiveProviders = discovered ∩ configEnabled ∩ dslScoped`.
+
+If the intersection is empty, the section should render an explicit “no providers match” error (not an empty list that looks like “no work items”).
+
+### Provider invocation (CLI targeting) — required rules
+
+We must be able to run actions and current-user lookups against the correct host.
+
+Policy:
+- Every provider instance must supply “how to invoke” information:
+  - GitHub: hostname (for `gh`), and whether the host is authenticated.
+  - GitLab: host/base URL (for `glab`), and whether the host is authenticated.
+
+GitHub (`gh`):
+- Prefer invoking with an explicit host flag where supported (avoid relying on ambient defaults):
+  - `gh --hostname <host> ...` (or equivalent supported mechanism).
+- For GraphQL/data access, prefer using `go-gh` client options with the host configured per instance rather than a single global default.
+
+GitLab (`glab`):
+- Prefer invoking with an explicit host where supported:
+  - `glab --host <host> ...` (or equivalent supported mechanism).
+- If `glab` cannot target a particular instance reliably for a given subcommand, fall back to calling the GitLab API directly with the token discovered from `glab` config for that host.
+
+### Provider iteration order (determinism without “global sorting”)
+
+Even when we concatenate per provider, we should keep the order deterministic to avoid UI jitter:
+
+Proposed rule (v1):
+1. Providers in the order they appear in `providers.include` (after expansion), then
+2. Remaining enabled providers in lexical order by `ProviderID`.
+
+If `providers.include` is empty/missing, default to lexical order by `ProviderID`.
+
+### GitLab project resolution (project path → project id)
+
+GitLab APIs often require numeric project IDs.
+
+Plan:
+- Resolve `project = "group/subgroup/name"` into a project ID using a per-host lookup.
+- Cache `{providerID, projectPath} → projectID` with a reasonable TTL.
+- If a project path is invalid for a provider instance:
+  - That provider fetch should return a provider-scoped error indicating the missing project.
+  - Other providers should continue (failure isolation).
+
+Note: this lookup must treat `projectPath` as URL path (not “display name”), and must be performed per host because the same path could exist on multiple instances.
+
 ---
 
 ## Milestones
@@ -365,6 +423,42 @@ Policy:
 - All caches, selection state, updates, and action routing key off `WorkItemKey`.
 - Do not use GitLab global IDs as the primary UI key.
 
+### Domain field contract (v1 UI)
+
+To keep UI refactors straightforward, define the minimum required fields that every provider must populate for list views.
+
+PR/MR list item (required):
+- `Key` (`WorkItemKey`)
+- `Title` (string)
+- `ProjectPath` (string)
+- `Author` (username/display)
+- `State` (open/closed/merged)
+- `UpdatedAt` (time)
+- `WebURL` (string)
+
+PR/MR list item (optional / capability-driven):
+- `IsDraft`
+- `Assignees`
+- `Labels`
+- `ReviewState` (approved/changes requested/etc.)
+- `CIState` (success/pending/failure/unknown)
+- `Additions`/`Deletions`
+- `SourceBranch`/`TargetBranch`
+
+Issue list item (required):
+- `Key` (`WorkItemKey`)
+- `Title`
+- `ProjectPath`
+- `Author`
+- `State` (open/closed)
+- `UpdatedAt`
+- `WebURL`
+
+Issue list item (optional):
+- `Assignees`
+- `Labels`
+- `CommentsCount` / `ReactionsCount` (if cheap)
+
 ---
 
 ## Capabilities Model (how we keep one UI without forcing parity)
@@ -421,6 +515,36 @@ Grouped mode:
 
 Concatenated mode:
 - “Next page” can page the provider that owns the currently selected row (simplest and predictable).
+
+---
+
+## Repo View: Remote Selection Rules
+
+Repo view needs a deterministic way to pick a provider instance from local git remotes.
+
+Proposed v1 rules:
+1. Prefer `origin` if it exists and parses to a supported host.
+2. If no `origin`, pick the first remote whose URL parses and matches an enabled provider instance.
+3. If multiple remotes match enabled providers, choose the one whose host matches an explicitly enabled instance (exact match beats wildcard).
+4. If none match, repo view shows a clear “no supported remote/provider found” message and disables provider-specific repo actions.
+
+If the chosen remote host corresponds to multiple discovered instances (shouldn’t happen if instance ids are host-based), treat it as a configuration error and ask the user to disambiguate (future: allow mapping aliases).
+
+---
+
+## Error Surfacing UX (provider-scoped)
+
+Provider failures should not look like “no items”.
+
+Plan:
+- In grouped mode:
+  - Show a provider header per group that can include an error line for that provider (auth missing, unsupported predicate, project not found, etc.).
+- In concatenated mode:
+  - Keep a small per-section “provider errors” summary visible somewhere predictable (e.g. footer/status area for the active section), listing failing providers and a short message.
+
+Actions:
+- If an action fails, show the error in the existing task/error UI.
+- If an action is unsupported, disable it in help/keys and show a friendly message if invoked anyway.
 
 ---
 
