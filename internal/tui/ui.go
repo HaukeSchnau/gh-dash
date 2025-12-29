@@ -867,6 +867,9 @@ func (m *Model) fetchAllViewSections() ([]section.Section, tea.Cmd) {
 func (m *Model) getCurrentViewSections() []section.Section {
 	switch m.ctx.View {
 	case config.RepoView:
+		if m.repo == nil {
+			return nil
+		}
 		return []section.Section{m.repo}
 	case config.PRsView:
 		return m.prs
@@ -888,6 +891,11 @@ func (m *Model) getCurrentViewDefaultSection() int {
 
 func (m *Model) setCurrentViewSections(newSections []section.Section) {
 	if newSections == nil {
+		return
+	}
+
+	if m.ctx.View == config.RepoView {
+		m.tabs.SetSections(newSections)
 		return
 	}
 
