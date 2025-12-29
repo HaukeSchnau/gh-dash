@@ -125,7 +125,9 @@ func (m *Model) renderViewSwitcher(ctx *context.ProgramContext) string {
 	if m.ctx.RepoPath != "" {
 		name := path.Base(m.ctx.RepoPath)
 		if m.ctx.RepoUrl != "" {
-			name = git.GetRepoShortName(m.ctx.RepoUrl)
+			if ref, err := git.ParseRemoteURL(m.ctx.RepoUrl); err == nil && ref.ProjectPath != "" {
+				name = ref.ProjectPath
+			}
 		}
 		repo = ctx.Styles.Common.FooterStyle.Render(fmt.Sprintf(" %s", name))
 	}

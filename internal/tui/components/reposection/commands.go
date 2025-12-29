@@ -251,7 +251,20 @@ func (m *Model) fetchPRsCmd() tea.Cmd {
 		if limit == nil {
 			limit = &m.Ctx.Config.Defaults.PrsLimit
 		}
-		res, err := data.FetchPullRequests(fmt.Sprintf("author:@me repo:%s", git.GetRepoShortName(m.Ctx.RepoUrl)), *limit, nil)
+		ref, err := git.ParseRemoteURL(m.Ctx.RepoUrl)
+		if err != nil || ref.ProjectPath == "" {
+			parseErr := err
+			if parseErr == nil {
+				parseErr = fmt.Errorf("missing project path")
+			}
+			return constants.TaskFinishedMsg{
+				SectionId:   0,
+				SectionType: SectionType,
+				TaskId:      prsTaskId,
+				Err:         fmt.Errorf("unsupported remote URL: %w", parseErr),
+			}
+		}
+		res, err := data.FetchPullRequests(fmt.Sprintf("author:@me repo:%s", ref.ProjectPath), *limit, nil)
 		if err != nil {
 			return constants.TaskFinishedMsg{
 				SectionId:   0,
@@ -285,7 +298,20 @@ func (m *Model) fetchPRCmd(branch string) []tea.Cmd {
 	}
 	startCmd := m.Ctx.StartTask(task)
 	return []tea.Cmd{startCmd, func() tea.Msg {
-		res, err := data.FetchPullRequests(fmt.Sprintf("author:@me repo:%s head:%s", git.GetRepoShortName(m.Ctx.RepoUrl), branch), 1, nil)
+		ref, err := git.ParseRemoteURL(m.Ctx.RepoUrl)
+		if err != nil || ref.ProjectPath == "" {
+			parseErr := err
+			if parseErr == nil {
+				parseErr = fmt.Errorf("missing project path")
+			}
+			return constants.TaskFinishedMsg{
+				SectionId:   0,
+				SectionType: SectionType,
+				TaskId:      prsTaskId,
+				Err:         fmt.Errorf("unsupported remote URL: %w", parseErr),
+			}
+		}
+		res, err := data.FetchPullRequests(fmt.Sprintf("author:@me repo:%s head:%s", ref.ProjectPath, branch), 1, nil)
 		log.Debug("Fetching PRs", "res", res)
 		if err != nil {
 			return constants.TaskFinishedMsg{

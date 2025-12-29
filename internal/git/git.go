@@ -190,9 +190,3 @@ func FetchRepo(dir string) (*Repo, error) {
 func GetRepoInPwd() (*gitm.Repository, error) {
 	return gitm.Open(".")
 }
-
-func GetRepoShortName(url string) string {
-	r, _ := strings.CutPrefix(url, "https://github.com/")
-	r, _ = strings.CutSuffix(r, ".git")
-	return r
-}
