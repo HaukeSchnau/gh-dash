@@ -12,12 +12,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
-	"github.com/cli/go-gh/v2/pkg/repository"
 	"github.com/go-sprout/sprout"
 	timeregistry "github.com/go-sprout/sprout/registry/time"
 
 	"github.com/dlvhdr/gh-dash/v4/internal/config"
 	"github.com/dlvhdr/gh-dash/v4/internal/data"
+	"github.com/dlvhdr/gh-dash/v4/internal/git"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/common"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/prompt"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/search"
@@ -69,8 +69,8 @@ func (options NewSectionOptions) GetConfigFiltersWithCurrentRemoteAdded(ctx *con
 	if !ctx.Config.SmartFilteringAtLaunch {
 		return searchValue
 	}
-	repo, err := repository.Current()
-	if err != nil {
+	currentRemoteFilter, ok := getCurrentRemoteFilter(ctx)
+	if !ok {
 		return searchValue
 	}
 	for token := range strings.FieldsSeq(searchValue) {
@@ -78,7 +78,10 @@ func (options NewSectionOptions) GetConfigFiltersWithCurrentRemoteAdded(ctx *con
 			return searchValue
 		}
 	}
-	return fmt.Sprintf("repo:%s/%s %s", repo.Owner, repo.Name, searchValue)
+	if searchValue == "" {
+		return currentRemoteFilter
+	}
+	return fmt.Sprintf("%s %s", currentRemoteFilter, searchValue)
 }
 
 func NewModel(
@@ -210,26 +213,36 @@ func (m *BaseModel) HasRepoNameInConfiguredFilter() bool {
 
 func (m *BaseModel) GetSearchValue() string {
 	searchValue := m.enrichSearchWithTemplateVars()
-	repo, err := repository.Current()
-	if err != nil {
+	currentRemoteFilter, ok := getCurrentRemoteFilter(m.Ctx)
+	if !ok {
 		return searchValue
 	}
 
 	if m.HasRepoNameInConfiguredFilter() {
 		return searchValue
 	}
-	currentCloneFilter := fmt.Sprintf("repo:%s/%s", repo.Owner, repo.Name)
 	var searchValueWithoutCurrentCloneFilter []string
 	for token := range strings.FieldsSeq(searchValue) {
-		if !strings.HasPrefix(token, currentCloneFilter) {
+		if !strings.HasPrefix(token, currentRemoteFilter) {
 			searchValueWithoutCurrentCloneFilter = append(searchValueWithoutCurrentCloneFilter, token)
 		}
 	}
 	if m.IsFilteredByCurrentRemote {
-		return fmt.Sprintf("%s %s", currentCloneFilter,
-			strings.Join(searchValueWithoutCurrentCloneFilter, " "))
+		return strings.TrimSpace(fmt.Sprintf("%s %s", currentRemoteFilter,
+			strings.Join(searchValueWithoutCurrentCloneFilter, " ")))
 	}
 	return strings.Join(searchValueWithoutCurrentCloneFilter, " ")
+}
+
+func getCurrentRemoteFilter(ctx *context.ProgramContext) (string, bool) {
+	if ctx == nil || ctx.RepoUrl == "" {
+		return "", false
+	}
+	ref, err := git.ParseRemoteURL(ctx.RepoUrl)
+	if err != nil || ref.ProjectPath == "" {
+		return "", false
+	}
+	return fmt.Sprintf("repo:%s", ref.ProjectPath), true
 }
 
 func (m *BaseModel) enrichSearchWithTemplateVars() string {
