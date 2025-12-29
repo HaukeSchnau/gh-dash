@@ -89,6 +89,7 @@ func (m *Model) watchChecks() tea.Cmd {
 			TaskId:      taskId,
 			Err:         err,
 			Msg: tasks.UpdatePRMsg{
+				Key:      m.GetCurrRow().Key(),
 				PrNumber: prNumber,
 			},
 		}

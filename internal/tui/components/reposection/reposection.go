@@ -12,6 +12,7 @@ import (
 
 	"github.com/dlvhdr/gh-dash/v4/internal/config"
 	"github.com/dlvhdr/gh-dash/v4/internal/data"
+	"github.com/dlvhdr/gh-dash/v4/internal/domain"
 	"github.com/dlvhdr/gh-dash/v4/internal/git"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/common"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/branch"
@@ -110,20 +111,21 @@ func (m *Model) Update(msg tea.Msg) (section.Section, tea.Cmd) {
 					cmd = tasks.CreatePR(m.Ctx, sid, branch, input)
 				default:
 					pr := findPRForRef(m.Prs, branch)
+					workItem := prToWorkItem(pr)
 					if input == "Y" || input == "y" {
 						switch action {
 						case "delete":
 							cmd = m.deleteBranch()
 						case "close":
-							cmd = tasks.ClosePR(m.Ctx, sid, pr)
+							cmd = tasks.ClosePR(m.Ctx, sid, workItem)
 						case "reopen":
-							cmd = tasks.ReopenPR(m.Ctx, sid, pr)
+							cmd = tasks.ReopenPR(m.Ctx, sid, workItem)
 						case "ready":
-							cmd = tasks.PRReady(m.Ctx, sid, pr)
+							cmd = tasks.PRReady(m.Ctx, sid, workItem)
 						case "merge":
-							cmd = tasks.MergePR(m.Ctx, sid, pr)
+							cmd = tasks.MergePR(m.Ctx, sid, workItem)
 						case "update":
-							cmd = tasks.UpdatePR(m.Ctx, sid, pr)
+							cmd = tasks.UpdatePR(m.Ctx, sid, workItem)
 						}
 					}
 				}
@@ -430,6 +432,16 @@ func findPRForRef(prs []data.PullRequestData, branch string) *data.PullRequestDa
 	return nil
 }
 
+func prToWorkItem(pr *data.PullRequestData) domain.WorkItem {
+	if pr == nil {
+		return nil
+	}
+	return &domain.PullRequest{
+		KeyValue: domain.NewWorkItemKey("", pr.Repository.NameWithOwner, pr.Number, domain.WorkItemPullRequest),
+		Primary:  pr,
+	}
+}
+
 func (m *Model) NumRows() int {
 	return len(m.repo.Branches)
 }
@@ -448,7 +460,7 @@ func (m *Model) getCurrBranch() *branch.Branch {
 	return &m.Branches[m.Table.GetCurrItem()]
 }
 
-func (m *Model) GetCurrRow() data.RowData {
+func (m *Model) GetCurrRow() domain.WorkItem {
 	if len(m.repo.Branches) == 0 {
 		return nil
 	}

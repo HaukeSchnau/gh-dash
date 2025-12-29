@@ -16,9 +16,8 @@ import (
 	log "github.com/charmbracelet/log"
 
 	"github.com/dlvhdr/gh-dash/v4/internal/config"
-	"github.com/dlvhdr/gh-dash/v4/internal/data"
+	"github.com/dlvhdr/gh-dash/v4/internal/domain"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/common"
-	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/prrow"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/section"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/constants"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/context"
@@ -33,7 +32,7 @@ func (m *Model) getCurrSection() section.Section {
 	return sections[m.currSectionId]
 }
 
-func (m *Model) getCurrRowData() data.RowData {
+func (m *Model) getCurrRowData() domain.WorkItem {
 	section := m.getCurrSection()
 	if section == nil {
 		return nil
@@ -84,7 +83,7 @@ func (m *Model) executeKeybinding(key string) tea.Cmd {
 			}
 
 			switch data := currRowData.(type) {
-			case *data.IssueData:
+			case *domain.Issue:
 				return m.runCustomIssueCommand(keybinding.Command, data)
 			}
 		}
@@ -97,7 +96,7 @@ func (m *Model) executeKeybinding(key string) tea.Cmd {
 			log.Debug("executing keybind", "key", keybinding.Key, "command", keybinding.Command)
 
 			switch data := currRowData.(type) {
-			case *prrow.Data:
+			case *domain.PullRequest:
 				return m.runCustomPRCommand(keybinding.Command, data)
 			}
 		}
@@ -110,7 +109,7 @@ func (m *Model) executeKeybinding(key string) tea.Cmd {
 			log.Debug("executing keybind", "key", keybinding.Key, "command", keybinding.Command)
 
 			switch data := currRowData.(type) {
-			case *prrow.Data:
+			case *domain.PullRequest:
 				return m.runCustomBranchCommand(keybinding.Command, data)
 			}
 		}
@@ -161,26 +160,26 @@ func (m *Model) runCustomCommand(commandTemplate string, contextData *map[string
 	return m.executeCustomCommand(buff.String())
 }
 
-func (m *Model) runCustomPRCommand(commandTemplate string, prData *prrow.Data) tea.Cmd {
+func (m *Model) runCustomPRCommand(commandTemplate string, prData *domain.PullRequest) tea.Cmd {
 	return m.runCustomCommand(commandTemplate,
 		&map[string]any{
 			"RepoName":    prData.GetRepoNameWithOwner(),
-			"PrNumber":    prData.Primary.Number,
+			"PrNumber":    prData.GetNumber(),
 			"HeadRefName": prData.Primary.HeadRefName,
 			"BaseRefName": prData.Primary.BaseRefName,
 		})
 }
 
-func (m *Model) runCustomIssueCommand(commandTemplate string, issueData *data.IssueData) tea.Cmd {
+func (m *Model) runCustomIssueCommand(commandTemplate string, issueData *domain.Issue) tea.Cmd {
 	return m.runCustomCommand(commandTemplate,
 		&map[string]any{
 			"RepoName":    issueData.GetRepoNameWithOwner(),
-			"IssueNumber": issueData.Number,
+			"IssueNumber": issueData.GetNumber(),
 		},
 	)
 }
 
-func (m *Model) runCustomBranchCommand(commandTemplate string, branchData *prrow.Data) tea.Cmd {
+func (m *Model) runCustomBranchCommand(commandTemplate string, branchData *domain.PullRequest) tea.Cmd {
 	if reflect.ValueOf(branchData).IsNil() {
 		return m.executeCustomCommand(commandTemplate)
 	}
@@ -191,7 +190,7 @@ func (m *Model) runCustomBranchCommand(commandTemplate string, branchData *prrow
 		maps.Copy(input,
 			map[string]any{
 				"RepoName":    branchData.GetRepoNameWithOwner(),
-				"PrNumber":    branchData.Primary.Number,
+				"PrNumber":    branchData.GetNumber(),
 				"HeadRefName": branchData.Primary.HeadRefName,
 				"BaseRefName": branchData.Primary.BaseRefName,
 			})

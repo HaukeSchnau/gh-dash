@@ -9,7 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/dlvhdr/gh-dash/v4/internal/data"
+	"github.com/dlvhdr/gh-dash/v4/internal/domain"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/common"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/inputbox"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/issuerow"
@@ -195,13 +195,13 @@ func (m *Model) renderFullNameAndNumber() string {
 
 func (m *Model) renderTitle() string {
 	return m.ctx.Styles.Common.MainTextStyle.Width(m.getIndentedContentWidth()).
-		Render(m.issue.Data.Title)
+		Render(m.issue.Data.Data.Title)
 }
 
 func (m *Model) renderStatusPill() string {
 	bgColor := ""
 	content := ""
-	switch m.issue.Data.State {
+	switch m.issue.Data.Data.State {
 	case "OPEN":
 		bgColor = m.ctx.Styles.Colors.OpenIssue.Dark
 		content = " Open"
@@ -219,7 +219,7 @@ func (m *Model) renderStatusPill() string {
 func (m *Model) renderBody() string {
 	width := m.getIndentedContentWidth()
 	// Strip HTML comments from body and cleanup body.
-	body := htmlCommentRegex.ReplaceAllString(m.issue.Data.Body, "")
+	body := htmlCommentRegex.ReplaceAllString(m.issue.Data.Data.Body, "")
 	body = lineCleanupRegex.ReplaceAllString(body, "")
 
 	body = strings.TrimSpace(body)
@@ -242,7 +242,7 @@ func (m *Model) renderBody() string {
 
 func (m *Model) renderLabels() string {
 	width := m.getIndentedContentWidth()
-	labels := m.issue.Data.Labels.Nodes
+	labels := m.issue.Data.Data.Labels.Nodes
 	style := m.ctx.Styles.PrView.PillStyle
 
 	return common.RenderLabels(width, labels, style)
@@ -261,7 +261,7 @@ func (m *Model) SetSectionId(id int) {
 	m.sectionId = id
 }
 
-func (m *Model) SetRow(data *data.IssueData) {
+func (m *Model) SetRow(data *domain.Issue) {
 	if data == nil {
 		m.issue = nil
 	} else {
@@ -342,7 +342,7 @@ func (m *Model) SetIsLabeling(isLabeling bool) tea.Cmd {
 	m.inputBox.SetPrompt("Add/remove labels (whitespace-separated)...")
 
 	labels := make([]string, 0)
-	for _, label := range m.issue.Data.Labels.Nodes {
+	for _, label := range m.issue.Data.Data.Labels.Nodes {
 		labels = append(labels, label.Name)
 	}
 	m.inputBox.SetValue(strings.Join(labels, " "))
@@ -354,7 +354,7 @@ func (m *Model) SetIsLabeling(isLabeling bool) tea.Cmd {
 }
 
 func (m *Model) userAssignedToIssue(login string) bool {
-	for _, a := range m.issue.Data.Assignees.Nodes {
+	for _, a := range m.issue.Data.Data.Assignees.Nodes {
 		if login == a.Login {
 			return true
 		}
@@ -386,7 +386,7 @@ func (m *Model) SetIsUnassigning(isUnassigning bool) tea.Cmd {
 
 func (m *Model) issueAssignees() []string {
 	var assignees []string
-	for _, n := range m.issue.Data.Assignees.Nodes {
+	for _, n := range m.issue.Data.Data.Assignees.Nodes {
 		assignees = append(assignees, n.Login)
 	}
 	return assignees

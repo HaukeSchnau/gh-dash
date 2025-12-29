@@ -6,7 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/dlvhdr/gh-dash/v4/internal/data"
+	"github.com/dlvhdr/gh-dash/v4/internal/domain"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/table"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/context"
@@ -15,7 +15,7 @@ import (
 
 type Issue struct {
 	Ctx            *context.ProgramContext
-	Data           data.IssueData
+	Data           domain.Issue
 	ShowAuthorIcon bool
 }
 
@@ -42,9 +42,9 @@ func (issue *Issue) renderUpdateAt() string {
 
 	updatedAtOutput := ""
 	if timeFormat == "" || timeFormat == "relative" {
-		updatedAtOutput = utils.TimeElapsed(issue.Data.UpdatedAt)
+		updatedAtOutput = utils.TimeElapsed(issue.Data.Data.UpdatedAt)
 	} else {
-		updatedAtOutput = issue.Data.UpdatedAt.Format(timeFormat)
+		updatedAtOutput = issue.Data.Data.UpdatedAt.Format(timeFormat)
 	}
 
 	return issue.getTextStyle().Render(updatedAtOutput)
@@ -55,37 +55,37 @@ func (issue *Issue) renderCreatedAt() string {
 
 	createdAtOutput := ""
 	if timeFormat == "" || timeFormat == "relative" {
-		createdAtOutput = utils.TimeElapsed(issue.Data.CreatedAt)
+		createdAtOutput = utils.TimeElapsed(issue.Data.Data.CreatedAt)
 	} else {
-		createdAtOutput = issue.Data.CreatedAt.Format(timeFormat)
+		createdAtOutput = issue.Data.Data.CreatedAt.Format(timeFormat)
 	}
 
 	return issue.getTextStyle().Render(createdAtOutput)
 }
 
 func (issue *Issue) renderRepoName() string {
-	repoName := issue.Data.Repository.Name
+	repoName := issue.Data.Data.Repository.Name
 	return issue.getTextStyle().Render(repoName)
 }
 
 func (issue *Issue) renderTitle() string {
-	return components.RenderIssueTitle(issue.Ctx, issue.Data.State, issue.Data.Title, issue.Data.Number)
+	return components.RenderIssueTitle(issue.Ctx, issue.Data.Data.State, issue.Data.Data.Title, issue.Data.Data.Number)
 }
 
 func (issue *Issue) renderOpenedBy() string {
-	return issue.getTextStyle().Render(issue.Data.GetAuthor(issue.Ctx.Theme, issue.ShowAuthorIcon))
+	return issue.getTextStyle().Render(issue.Data.Data.GetAuthor(issue.Ctx.Theme, issue.ShowAuthorIcon))
 }
 
 func (issue *Issue) renderAssignees() string {
-	assignees := make([]string, 0, len(issue.Data.Assignees.Nodes))
-	for _, assignee := range issue.Data.Assignees.Nodes {
+	assignees := make([]string, 0, len(issue.Data.Data.Assignees.Nodes))
+	for _, assignee := range issue.Data.Data.Assignees.Nodes {
 		assignees = append(assignees, assignee.Login)
 	}
 	return issue.getTextStyle().Render(strings.Join(assignees, ","))
 }
 
 func (issue *Issue) renderStatus() string {
-	if issue.Data.State == "OPEN" {
+	if issue.Data.Data.State == "OPEN" {
 		return lipgloss.NewStyle().Foreground(issue.Ctx.Styles.Colors.OpenIssue).Render("")
 	} else {
 		return issue.getTextStyle().Render("")
@@ -93,9 +93,9 @@ func (issue *Issue) renderStatus() string {
 }
 
 func (issue *Issue) renderNumComments() string {
-	return issue.getTextStyle().Render(fmt.Sprintf("%d", issue.Data.Comments.TotalCount))
+	return issue.getTextStyle().Render(fmt.Sprintf("%d", issue.Data.Data.Comments.TotalCount))
 }
 
 func (issue *Issue) renderNumReactions() string {
-	return issue.getTextStyle().Render(fmt.Sprintf("%d", issue.Data.Reactions.TotalCount))
+	return issue.getTextStyle().Render(fmt.Sprintf("%d", issue.Data.Data.Reactions.TotalCount))
 }

@@ -52,6 +52,7 @@ func (m *Model) unassign(usernames []string) tea.Cmd {
 			TaskId:      taskId,
 			Err:         err,
 			Msg: tasks.UpdatePRMsg{
+				Key:              m.pr.Data.Key(),
 				PrNumber:         prNumber,
 				RemovedAssignees: &returnedAssignees,
 			},

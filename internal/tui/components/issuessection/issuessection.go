@@ -10,6 +10,7 @@ import (
 
 	"github.com/dlvhdr/gh-dash/v4/internal/config"
 	"github.com/dlvhdr/gh-dash/v4/internal/data"
+	"github.com/dlvhdr/gh-dash/v4/internal/domain"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/issuerow"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/section"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/table"
@@ -23,7 +24,7 @@ const SectionType = "issue"
 
 type Model struct {
 	section.BaseModel
-	Issues []data.IssueData
+	Issues []domain.Issue
 }
 
 func NewModel(
@@ -47,7 +48,7 @@ func NewModel(
 			CreatedAt:   createdAt,
 		},
 	)
-	m.Issues = []data.IssueData{}
+	m.Issues = []domain.Issue{}
 
 	return m
 }
@@ -119,27 +120,27 @@ func (m *Model) Update(msg tea.Msg) (section.Section, tea.Cmd) {
 
 	case UpdateIssueMsg:
 		for i, currIssue := range m.Issues {
-			if currIssue.Number == msg.IssueNumber {
+			if currIssue.Key() == msg.Key || currIssue.Data.Number == msg.IssueNumber {
 				if msg.IsClosed != nil {
 					if *msg.IsClosed {
-						currIssue.State = "CLOSED"
+						currIssue.Data.State = "CLOSED"
 					} else {
-						currIssue.State = "OPEN"
+						currIssue.Data.State = "OPEN"
 					}
 				}
 				if msg.Labels != nil {
-					currIssue.Labels.Nodes = msg.Labels.Nodes
+					currIssue.Data.Labels.Nodes = msg.Labels.Nodes
 				}
 				if msg.NewComment != nil {
-					currIssue.Comments.Nodes = append(currIssue.Comments.Nodes, *msg.NewComment)
+					currIssue.Data.Comments.Nodes = append(currIssue.Data.Comments.Nodes, *msg.NewComment)
 				}
 				if msg.AddedAssignees != nil {
-					currIssue.Assignees.Nodes = addAssignees(
-						currIssue.Assignees.Nodes, msg.AddedAssignees.Nodes)
+					currIssue.Data.Assignees.Nodes = addAssignees(
+						currIssue.Data.Assignees.Nodes, msg.AddedAssignees.Nodes)
 				}
 				if msg.RemovedAssignees != nil {
-					currIssue.Assignees.Nodes = removeAssignees(
-						currIssue.Assignees.Nodes, msg.RemovedAssignees.Nodes)
+					currIssue.Data.Assignees.Nodes = removeAssignees(
+						currIssue.Data.Assignees.Nodes, msg.RemovedAssignees.Nodes)
 				}
 				m.Issues[i] = currIssue
 				m.SetIsLoading(false)
@@ -275,7 +276,7 @@ func (m *Model) NumRows() int {
 	return len(m.Issues)
 }
 
-func (m *Model) GetCurrRow() data.RowData {
+func (m *Model) GetCurrRow() domain.WorkItem {
 	if len(m.Issues) == 0 {
 		return nil
 	}
@@ -328,12 +329,17 @@ func (m *Model) FetchNextPageSectionRows() []tea.Cmd {
 			}
 		}
 
+		issues := make([]domain.Issue, 0, len(res.Issues))
+		for i := range res.Issues {
+			issues = append(issues, domain.NewIssueFromData(res.Issues[i]))
+		}
+
 		return constants.TaskFinishedMsg{
 			SectionId:   m.Id,
 			SectionType: m.Type,
 			TaskId:      taskId,
 			Msg: SectionIssuesFetchedMsg{
-				Issues:     res.Issues,
+				Issues:     issues,
 				TotalCount: res.TotalCount,
 				PageInfo:   res.PageInfo,
 				TaskId:     taskId,
@@ -380,13 +386,14 @@ func FetchAllSections(
 }
 
 type SectionIssuesFetchedMsg struct {
-	Issues     []data.IssueData
+	Issues     []domain.Issue
 	TotalCount int
 	PageInfo   data.PageInfo
 	TaskId     string
 }
 
 type UpdateIssueMsg struct {
+	Key              domain.WorkItemKey
 	IssueNumber      int
 	Labels           *data.IssueLabels
 	NewComment       *data.IssueComment

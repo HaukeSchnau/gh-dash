@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/log"
 
 	"github.com/dlvhdr/gh-dash/v4/internal/data"
+	"github.com/dlvhdr/gh-dash/v4/internal/domain"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/constants"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/context"
 	"github.com/dlvhdr/gh-dash/v4/internal/utils"
@@ -20,6 +21,7 @@ type SectionIdentifier struct {
 }
 
 type UpdatePRMsg struct {
+	Key              domain.WorkItemKey
 	PrNumber         int
 	IsClosed         *bool
 	NewComment       *data.Comment
@@ -93,7 +95,7 @@ func OpenBranchPR(ctx *context.ProgramContext, section SectionIdentifier, branch
 	})
 }
 
-func ReopenPR(ctx *context.ProgramContext, section SectionIdentifier, pr data.RowData) tea.Cmd {
+func ReopenPR(ctx *context.ProgramContext, section SectionIdentifier, pr domain.WorkItem) tea.Cmd {
 	prNumber := pr.GetNumber()
 	return fireTask(ctx, GitHubTask{
 		Id: buildTaskId("pr_reopen", prNumber),
@@ -109,6 +111,7 @@ func ReopenPR(ctx *context.ProgramContext, section SectionIdentifier, pr data.Ro
 		FinishedText: fmt.Sprintf("PR #%d has been reopened", prNumber),
 		Msg: func(c *exec.Cmd, err error) tea.Msg {
 			return UpdatePRMsg{
+				Key:      pr.Key(),
 				PrNumber: prNumber,
 				IsClosed: utils.BoolPtr(false),
 			}
@@ -116,7 +119,7 @@ func ReopenPR(ctx *context.ProgramContext, section SectionIdentifier, pr data.Ro
 	})
 }
 
-func ClosePR(ctx *context.ProgramContext, section SectionIdentifier, pr data.RowData) tea.Cmd {
+func ClosePR(ctx *context.ProgramContext, section SectionIdentifier, pr domain.WorkItem) tea.Cmd {
 	prNumber := pr.GetNumber()
 	return fireTask(ctx, GitHubTask{
 		Id: buildTaskId("pr_close", prNumber),
@@ -132,6 +135,7 @@ func ClosePR(ctx *context.ProgramContext, section SectionIdentifier, pr data.Row
 		FinishedText: fmt.Sprintf("PR #%d has been closed", prNumber),
 		Msg: func(c *exec.Cmd, err error) tea.Msg {
 			return UpdatePRMsg{
+				Key:      pr.Key(),
 				PrNumber: prNumber,
 				IsClosed: utils.BoolPtr(true),
 			}
@@ -139,7 +143,7 @@ func ClosePR(ctx *context.ProgramContext, section SectionIdentifier, pr data.Row
 	})
 }
 
-func PRReady(ctx *context.ProgramContext, section SectionIdentifier, pr data.RowData) tea.Cmd {
+func PRReady(ctx *context.ProgramContext, section SectionIdentifier, pr domain.WorkItem) tea.Cmd {
 	prNumber := pr.GetNumber()
 	return fireTask(ctx, GitHubTask{
 		Id: buildTaskId("pr_ready", prNumber),
@@ -155,6 +159,7 @@ func PRReady(ctx *context.ProgramContext, section SectionIdentifier, pr data.Row
 		FinishedText: fmt.Sprintf("PR #%d has been marked as ready for review", prNumber),
 		Msg: func(c *exec.Cmd, err error) tea.Msg {
 			return UpdatePRMsg{
+				Key:            pr.Key(),
 				PrNumber:       prNumber,
 				ReadyForReview: utils.BoolPtr(true),
 			}
@@ -162,7 +167,7 @@ func PRReady(ctx *context.ProgramContext, section SectionIdentifier, pr data.Row
 	})
 }
 
-func MergePR(ctx *context.ProgramContext, section SectionIdentifier, pr data.RowData) tea.Cmd {
+func MergePR(ctx *context.ProgramContext, section SectionIdentifier, pr domain.WorkItem) tea.Cmd {
 	prNumber := pr.GetNumber()
 	c := exec.Command(
 		"gh",
@@ -192,6 +197,7 @@ func MergePR(ctx *context.ProgramContext, section SectionIdentifier, pr data.Row
 			TaskId:      taskId,
 			Err:         err,
 			Msg: UpdatePRMsg{
+				Key:      pr.Key(),
 				PrNumber: prNumber,
 				IsMerged: &isMerged,
 			},
@@ -233,7 +239,7 @@ func CreatePR(ctx *context.ProgramContext, section SectionIdentifier, branchName
 	}))
 }
 
-func UpdatePR(ctx *context.ProgramContext, section SectionIdentifier, pr data.RowData) tea.Cmd {
+func UpdatePR(ctx *context.ProgramContext, section SectionIdentifier, pr domain.WorkItem) tea.Cmd {
 	prNumber := pr.GetNumber()
 	return fireTask(ctx, GitHubTask{
 		Id: buildTaskId("pr_update", prNumber),
@@ -249,6 +255,7 @@ func UpdatePR(ctx *context.ProgramContext, section SectionIdentifier, pr data.Ro
 		FinishedText: fmt.Sprintf("PR #%d has been updated", prNumber),
 		Msg: func(c *exec.Cmd, err error) tea.Msg {
 			return UpdatePRMsg{
+				Key:      pr.Key(),
 				PrNumber: prNumber,
 				IsClosed: utils.BoolPtr(true),
 			}

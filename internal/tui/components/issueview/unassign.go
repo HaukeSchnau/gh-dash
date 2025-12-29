@@ -50,6 +50,7 @@ func (m *Model) unassign(usernames []string) tea.Cmd {
 			TaskId:      taskId,
 			Err:         err,
 			Msg: issuessection.UpdateIssueMsg{
+				Key:              m.issue.Data.Key(),
 				IssueNumber:      issueNumber,
 				RemovedAssignees: &returnedAssignees,
 			},

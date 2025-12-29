@@ -1,20 +1,10 @@
 package data
 
 import (
-	"time"
-
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/theme"
 )
-
-type RowData interface {
-	GetRepoNameWithOwner() string
-	GetTitle() string
-	GetNumber() int
-	GetUrl() string
-	GetUpdatedAt() time.Time
-}
 
 func GetAuthorRoleIcon(role string, theme theme.Theme) string {
 	// https://docs.github.com/en/graphql/reference/enums#commentauthorassociation

@@ -45,6 +45,7 @@ func (m *Model) comment(body string) tea.Cmd {
 			TaskId:      taskId,
 			Err:         err,
 			Msg: tasks.UpdatePRMsg{
+				Key:      m.pr.Data.Key(),
 				PrNumber: prNumber,
 				NewComment: &data.Comment{
 					Author:    struct{ Login string }{Login: m.ctx.User},

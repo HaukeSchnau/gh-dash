@@ -36,7 +36,7 @@ func (m *Model) label(labels []string) tea.Cmd {
 		labelsMap[label] = true
 	}
 
-	for _, label := range m.issue.Data.Labels.Nodes {
+	for _, label := range m.issue.Data.Data.Labels.Nodes {
 		if _, ok := labelsMap[label.Name]; !ok {
 			commandArgs = append(commandArgs, "--remove-label")
 			commandArgs = append(commandArgs, label.Name)
@@ -64,6 +64,7 @@ func (m *Model) label(labels []string) tea.Cmd {
 			TaskId:      taskId,
 			Err:         err,
 			Msg: issuessection.UpdateIssueMsg{
+				Key:         m.issue.Data.Key(),
 				IssueNumber: issueNumber,
 				Labels:      &returnedLabels,
 			},

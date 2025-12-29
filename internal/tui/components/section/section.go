@@ -17,6 +17,7 @@ import (
 
 	"github.com/dlvhdr/gh-dash/v4/internal/config"
 	"github.com/dlvhdr/gh-dash/v4/internal/data"
+	"github.com/dlvhdr/gh-dash/v4/internal/domain"
 	"github.com/dlvhdr/gh-dash/v4/internal/git"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/common"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/prompt"
@@ -160,7 +161,7 @@ type Component interface {
 
 type Table interface {
 	NumRows() int
-	GetCurrRow() data.RowData
+	GetCurrRow() domain.WorkItem
 	CurrRow() int
 	NextRow() int
 	PrevRow() int
@@ -283,7 +284,7 @@ func (m *BaseModel) UpdateProgramContext(ctx *context.ProgramContext) {
 
 type SectionRowsFetchedMsg struct {
 	SectionId int
-	Issues    []data.RowData
+	Issues    []domain.WorkItem
 }
 
 func (msg SectionRowsFetchedMsg) GetSectionId() int {

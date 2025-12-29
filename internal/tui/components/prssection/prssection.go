@@ -10,6 +10,7 @@ import (
 
 	"github.com/dlvhdr/gh-dash/v4/internal/config"
 	"github.com/dlvhdr/gh-dash/v4/internal/data"
+	"github.com/dlvhdr/gh-dash/v4/internal/domain"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/prrow"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/section"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/table"
@@ -24,7 +25,7 @@ const SectionType = "pr"
 
 type Model struct {
 	section.BaseModel
-	Prs []prrow.Data
+	Prs []domain.PullRequest
 }
 
 func NewModel(
@@ -48,7 +49,7 @@ func NewModel(
 			CreatedAt:   createdAt,
 		},
 	)
-	m.Prs = []prrow.Data{}
+	m.Prs = []domain.PullRequest{}
 
 	return m
 }
@@ -142,7 +143,7 @@ func (m *Model) Update(msg tea.Msg) (section.Section, tea.Cmd) {
 
 	case tasks.UpdatePRMsg:
 		for i, currPr := range m.Prs {
-			if currPr.Primary.Number != msg.PrNumber {
+			if currPr.Key() != msg.Key && currPr.Primary.Number != msg.PrNumber {
 				continue
 			}
 
@@ -401,13 +402,13 @@ func (m *Model) NumRows() int {
 }
 
 type SectionPullRequestsFetchedMsg struct {
-	Prs        []prrow.Data
+	Prs        []domain.PullRequest
 	TotalCount int
 	PageInfo   data.PageInfo
 	TaskId     string
 }
 
-func (m *Model) GetCurrRow() data.RowData {
+func (m *Model) GetCurrRow() domain.WorkItem {
 	if len(m.Prs) == 0 {
 		return nil
 	}
@@ -462,9 +463,9 @@ func (m *Model) FetchNextPageSectionRows() []tea.Cmd {
 			}
 		}
 
-		prs := make([]prrow.Data, 0)
-		for _, pr := range res.Prs {
-			prs = append(prs, prrow.Data{Primary: &pr})
+		prs := make([]domain.PullRequest, 0, len(res.Prs))
+		for i := range res.Prs {
+			prs = append(prs, domain.NewPullRequestFromData(res.Prs[i]))
 		}
 		return constants.TaskFinishedMsg{
 			SectionId:   m.Id,

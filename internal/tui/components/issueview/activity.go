@@ -22,7 +22,7 @@ func (m *Model) renderActivity() string {
 	markdownRenderer := markdown.GetMarkdownRenderer(width)
 
 	var activity []RenderedActivity
-	for _, comment := range m.issue.Data.Comments.Nodes {
+	for _, comment := range m.issue.Data.Data.Comments.Nodes {
 		renderedComment, err := m.renderComment(comment, markdownRenderer)
 		if err != nil {
 			continue

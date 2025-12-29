@@ -44,6 +44,7 @@ func (m *Model) comment(body string) tea.Cmd {
 			TaskId:      taskId,
 			Err:         err,
 			Msg: issuessection.UpdateIssueMsg{
+				Key:         m.issue.Data.Key(),
 				IssueNumber: issueNumber,
 				NewComment: &data.IssueComment{
 					Author:    struct{ Login string }{Login: m.ctx.User},

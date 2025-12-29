@@ -39,6 +39,7 @@ func (m *Model) close() tea.Cmd {
 			TaskId:      taskId,
 			Err:         err,
 			Msg: UpdateIssueMsg{
+				Key:         issue.Key(),
 				IssueNumber: issueNumber,
 				IsClosed:    utils.BoolPtr(true),
 			},
