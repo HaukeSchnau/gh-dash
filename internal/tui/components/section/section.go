@@ -32,6 +32,7 @@ type BaseModel struct {
 	Id                        int
 	Config                    config.SectionConfig
 	Ctx                       *context.ProgramContext
+	ProviderID                string
 	Spinner                   spinner.Model
 	SearchBar                 search.Model
 	IsSearching               bool
@@ -57,6 +58,7 @@ type NewSectionOptions struct {
 	Id          int
 	Config      config.SectionConfig
 	Ctx         *context.ProgramContext
+	ProviderID  string
 	Type        string
 	Columns     []table.Column
 	Singular    string
@@ -93,6 +95,7 @@ func NewModel(
 	m := BaseModel{
 		Ctx:          ctx,
 		Id:           options.Id,
+		ProviderID:   options.ProviderID,
 		Type:         options.Type,
 		Config:       options.Config,
 		Spinner:      spinner.Model{Spinner: spinner.Dot},

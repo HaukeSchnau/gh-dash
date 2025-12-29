@@ -1,11 +1,13 @@
 package context
 
 import (
+	"fmt"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/dlvhdr/gh-dash/v4/internal/config"
+	"github.com/dlvhdr/gh-dash/v4/internal/providers"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/theme"
 	"github.com/dlvhdr/gh-dash/v4/internal/utils"
 )
@@ -44,6 +46,8 @@ type ProgramContext struct {
 	StartTask         func(task Task) tea.Cmd
 	Theme             theme.Theme
 	Styles            Styles
+	Providers         []providers.Instance
+	GroupByProvider   bool
 }
 
 func (ctx *ProgramContext) GetViewSectionsConfig() []config.SectionConfig {
@@ -58,14 +62,105 @@ func (ctx *ProgramContext) GetViewSectionsConfig() []config.SectionConfig {
 			Type:    &t,
 		}.ToSectionConfig())
 	case config.PRsView:
-		for _, cfg := range ctx.Config.PRSections {
-			configs = append(configs, cfg.ToSectionConfig())
-		}
+		configs = append(configs, ctx.GetPrSectionConfigs()...)
 	case config.IssuesView:
-		for _, cfg := range ctx.Config.IssuesSections {
-			configs = append(configs, cfg.ToSectionConfig())
-		}
+		configs = append(configs, ctx.GetIssueSectionConfigs()...)
 	}
 
 	return append([]config.SectionConfig{{Title: ""}}, configs...)
+}
+
+func (ctx *ProgramContext) ProvidersByKind(kind providers.Kind) []providers.Instance {
+	if len(ctx.Providers) == 0 {
+		return nil
+	}
+	out := make([]providers.Instance, 0, len(ctx.Providers))
+	for _, provider := range ctx.Providers {
+		if provider.Kind == kind {
+			out = append(out, provider)
+		}
+	}
+	return out
+}
+
+func (ctx *ProgramContext) ProviderByID(providerID string) (providers.Instance, bool) {
+	for _, provider := range ctx.Providers {
+		if provider.ID == providerID {
+			return provider, true
+		}
+	}
+	return providers.Instance{}, false
+}
+
+func (ctx *ProgramContext) ProviderLabel(providerID string) string {
+	if providerID == "" {
+		return ""
+	}
+	if ctx.GroupByProvider || len(ctx.Providers) <= 1 {
+		return ""
+	}
+	if provider, ok := ctx.ProviderByID(providerID); ok {
+		return provider.DisplayName
+	}
+	return providerID
+}
+
+func (ctx *ProgramContext) GetPrSectionConfigs() []config.SectionConfig {
+	sections := ctx.Config.PRSections
+	if !ctx.GroupByProvider {
+		out := make([]config.SectionConfig, 0, len(sections))
+		for _, cfg := range sections {
+			out = append(out, cfg.ToSectionConfig())
+		}
+		return out
+	}
+
+	providers := ctx.ProvidersByKind(providers.KindGitHub)
+	if len(providers) == 0 {
+		out := make([]config.SectionConfig, 0, len(sections))
+		for _, cfg := range sections {
+			out = append(out, cfg.ToSectionConfig())
+		}
+		return out
+	}
+
+	out := make([]config.SectionConfig, 0, len(sections)*len(providers))
+	for _, provider := range providers {
+		for _, cfg := range sections {
+			sectionCfg := cfg.ToSectionConfig()
+			sectionCfg.Title = fmt.Sprintf("%s · %s", sectionCfg.Title, provider.DisplayName)
+			out = append(out, sectionCfg)
+		}
+	}
+	return out
+}
+
+func (ctx *ProgramContext) GetIssueSectionConfigs() []config.SectionConfig {
+	sections := ctx.Config.IssuesSections
+	if !ctx.GroupByProvider {
+		out := make([]config.SectionConfig, 0, len(sections))
+		for _, cfg := range sections {
+			out = append(out, cfg.ToSectionConfig())
+		}
+		return out
+	}
+
+	providers := ctx.ProvidersByKind(providers.KindGitHub)
+	if len(providers) == 0 {
+		out := make([]config.SectionConfig, 0, len(sections))
+		for _, cfg := range sections {
+			out = append(out, cfg.ToSectionConfig())
+		}
+		return out
+	}
+
+	out := make([]config.SectionConfig, 0, len(sections)*len(providers))
+	for _, provider := range providers {
+		for _, cfg := range sections {
+			sectionCfg := cfg.ToSectionConfig()
+			sectionCfg.Title = fmt.Sprintf("%s · %s", sectionCfg.Title, provider.DisplayName)
+			out = append(out, sectionCfg)
+		}
+	}
+	return out
 }

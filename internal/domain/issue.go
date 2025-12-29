@@ -18,6 +18,13 @@ func NewIssueFromData(issue data.IssueData) Issue {
 	}
 }
 
+func NewIssueFromDataWithProvider(issue data.IssueData, providerID string) Issue {
+	return Issue{
+		KeyValue: NewWorkItemKey(providerID, issue.Repository.NameWithOwner, issue.Number, WorkItemIssue),
+		Data:     issue,
+	}
+}
+
 func (issue Issue) Key() WorkItemKey {
 	return issue.KeyValue
 }

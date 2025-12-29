@@ -281,9 +281,22 @@ type PullRequestsResponse struct {
 }
 
 var client *gh.GraphQLClient
+var clientOverride bool
 
 func SetClient(c *gh.GraphQLClient) {
 	client = c
+	clientOverride = true
+}
+
+func IsClientOverride() bool {
+	return clientOverride
+}
+
+func FetchPullRequestsWithClient(client *gh.GraphQLClient, query string, limit int, pageInfo *PageInfo) (PullRequestsResponse, error) {
+	if client == nil {
+		return FetchPullRequests(query, limit, pageInfo)
+	}
+	return fetchPullRequests(client, query, limit, pageInfo)
 }
 
 func FetchPullRequests(query string, limit int, pageInfo *PageInfo) (PullRequestsResponse, error) {
@@ -302,6 +315,10 @@ func FetchPullRequests(query string, limit int, pageInfo *PageInfo) (PullRequest
 		return PullRequestsResponse{}, err
 	}
 
+	return fetchPullRequests(client, query, limit, pageInfo)
+}
+
+func fetchPullRequests(client *gh.GraphQLClient, query string, limit int, pageInfo *PageInfo) (PullRequestsResponse, error) {
 	var queryResult struct {
 		Search struct {
 			Nodes []struct {
@@ -321,8 +338,7 @@ func FetchPullRequests(query string, limit int, pageInfo *PageInfo) (PullRequest
 		"endCursor": (*graphql.String)(endCursor),
 	}
 	log.Debug("Fetching PRs", "query", query, "limit", limit, "endCursor", endCursor)
-	err = client.Query("SearchPullRequests", &queryResult, variables)
-	if err != nil {
+	if err := client.Query("SearchPullRequests", &queryResult, variables); err != nil {
 		return PullRequestsResponse{}, err
 	}
 	log.Info("Successfully fetched PRs", "count", queryResult.Search.IssueCount)

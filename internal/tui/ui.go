@@ -22,6 +22,7 @@ import (
 	"github.com/dlvhdr/gh-dash/v4/internal/data"
 	"github.com/dlvhdr/gh-dash/v4/internal/domain"
 	"github.com/dlvhdr/gh-dash/v4/internal/git"
+	"github.com/dlvhdr/gh-dash/v4/internal/providers"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/common"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/branch"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/branchsidebar"
@@ -148,7 +149,19 @@ func (m *Model) initScreen() tea.Msg {
 		showError(err)
 	}
 
-	return initMsg{Config: cfg, RepoUrl: url}
+	providersList := make([]providers.Instance, 0)
+	if ghProviders, err := providers.DiscoverGitHubInstances(); err == nil {
+		providersList = append(providersList, ghProviders...)
+	} else {
+		log.Warn("failed to discover GitHub hosts", "err", err)
+	}
+	if glProviders, err := providers.DiscoverGitLabInstances(); err == nil {
+		providersList = append(providersList, glProviders...)
+	} else {
+		log.Warn("failed to discover GitLab hosts", "err", err)
+	}
+
+	return initMsg{Config: cfg, RepoUrl: url, Providers: providersList}
 }
 
 func (m Model) Init() tea.Cmd {
@@ -256,6 +269,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			newSections, fetchSectionsCmds := m.fetchAllViewSections()
 			m.setCurrentViewSections(newSections)
 			cmds = append(cmds, fetchSectionsCmds)
+
+		case key.Matches(msg, m.keys.ToggleGroupByProvider):
+			m.ctx.GroupByProvider = !m.ctx.GroupByProvider
+			if m.ctx.View != config.RepoView {
+				m.setCurrSectionId(m.getCurrentViewDefaultSection())
+				newSections, fetchSectionsCmds := m.fetchAllViewSections()
+				m.setCurrentViewSections(newSections)
+				cmds = append(cmds, fetchSectionsCmds)
+			}
 
 		case key.Matches(msg, m.keys.Redraw):
 			// can't find a way to just ask to send bubbletea's internal repaintMsg{},
@@ -531,6 +553,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case initMsg:
 		m.ctx.Config = &msg.Config
 		m.ctx.RepoUrl = msg.RepoUrl
+		m.ctx.Providers = msg.Providers
 		m.ctx.Theme = theme.ParseTheme(m.ctx.Config)
 		m.ctx.Styles = context.InitStyles(m.ctx.Theme)
 		m.ctx.View = m.ctx.Config.Defaults.View
@@ -726,8 +749,9 @@ func (m Model) View() string {
 }
 
 type initMsg struct {
-	Config  config.Config
-	RepoUrl string
+	Config    config.Config
+	RepoUrl   string
+	Providers []providers.Instance
 }
 
 func (m *Model) setCurrSectionId(newSectionId int) {
@@ -912,6 +936,7 @@ func (m *Model) setCurrentViewSections(newSections []section.Section) {
 				},
 				time.Now(),
 				time.Now(),
+				"",
 			)
 			s = append(s, &search)
 		}
@@ -928,6 +953,7 @@ func (m *Model) setCurrentViewSections(newSections []section.Section) {
 				},
 				time.Now(),
 				time.Now(),
+				"",
 			)
 			s = append(s, &search)
 		}

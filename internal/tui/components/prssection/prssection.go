@@ -7,11 +7,13 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	gh "github.com/cli/go-gh/v2/pkg/api"
 
 	"github.com/dlvhdr/gh-dash/v4/internal/config"
 	"github.com/dlvhdr/gh-dash/v4/internal/data"
 	"github.com/dlvhdr/gh-dash/v4/internal/domain"
 	"github.com/dlvhdr/gh-dash/v4/internal/dsl"
+	"github.com/dlvhdr/gh-dash/v4/internal/providers"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/prrow"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/section"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/table"
@@ -35,6 +37,7 @@ func NewModel(
 	cfg config.PrsSectionConfig,
 	lastUpdated time.Time,
 	createdAt time.Time,
+	providerID string,
 ) Model {
 	m := Model{}
 	m.BaseModel = section.NewModel(
@@ -42,6 +45,7 @@ func NewModel(
 		section.NewSectionOptions{
 			Id:          id,
 			Config:      cfg.ToSectionConfig(),
+			ProviderID:  providerID,
 			Type:        SectionType,
 			Columns:     GetSectionColumns(cfg, ctx),
 			Singular:    m.GetItemSingularForm(),
@@ -464,19 +468,79 @@ func (m *Model) FetchNextPageSectionRows() []tea.Cmd {
 				}
 			}
 		}
-		res, err := data.FetchPullRequests(m.GetFilters(), *limit, m.PageInfo)
-		if err != nil {
+		providers := m.providersForFetch()
+		if len(providers) == 0 {
+			res, err := data.FetchPullRequests(m.GetFilters(), *limit, m.PageInfo)
+			if err != nil {
+				return constants.TaskFinishedMsg{
+					SectionId:   m.Id,
+					SectionType: m.Type,
+					TaskId:      taskId,
+					Err:         err,
+				}
+			}
+
+			prs := make([]domain.PullRequest, 0, len(res.Prs))
+			for i := range res.Prs {
+				prs = append(prs, domain.NewPullRequestFromData(res.Prs[i]))
+			}
 			return constants.TaskFinishedMsg{
 				SectionId:   m.Id,
 				SectionType: m.Type,
 				TaskId:      taskId,
-				Err:         err,
+				Msg: SectionPullRequestsFetchedMsg{
+					Prs:        prs,
+					TotalCount: res.TotalCount,
+					PageInfo:   res.PageInfo,
+					TaskId:     taskId,
+				},
 			}
 		}
 
-		prs := make([]domain.PullRequest, 0, len(res.Prs))
-		for i := range res.Prs {
-			prs = append(prs, domain.NewPullRequestFromData(res.Prs[i]))
+		if len(providers) == 1 {
+			res, err := fetchPullRequestsForProvider(providers[0], m.GetFilters(), *limit, m.PageInfo)
+			if err != nil {
+				return constants.TaskFinishedMsg{
+					SectionId:   m.Id,
+					SectionType: m.Type,
+					TaskId:      taskId,
+					Err:         err,
+				}
+			}
+
+			prs := make([]domain.PullRequest, 0, len(res.Prs))
+			for i := range res.Prs {
+				prs = append(prs, domain.NewPullRequestFromDataWithProvider(res.Prs[i], providers[0].ID))
+			}
+			return constants.TaskFinishedMsg{
+				SectionId:   m.Id,
+				SectionType: m.Type,
+				TaskId:      taskId,
+				Msg: SectionPullRequestsFetchedMsg{
+					Prs:        prs,
+					TotalCount: res.TotalCount,
+					PageInfo:   res.PageInfo,
+					TaskId:     taskId,
+				},
+			}
+		}
+
+		totalCount := 0
+		prs := make([]domain.PullRequest, 0, len(providers)*(*limit))
+		for _, provider := range providers {
+			res, err := fetchPullRequestsForProvider(provider, m.GetFilters(), *limit, nil)
+			if err != nil {
+				return constants.TaskFinishedMsg{
+					SectionId:   m.Id,
+					SectionType: m.Type,
+					TaskId:      taskId,
+					Err:         err,
+				}
+			}
+			totalCount += res.TotalCount
+			for i := range res.Prs {
+				prs = append(prs, domain.NewPullRequestFromDataWithProvider(res.Prs[i], provider.ID))
+			}
 		}
 		return constants.TaskFinishedMsg{
 			SectionId:   m.Id,
@@ -484,8 +548,8 @@ func (m *Model) FetchNextPageSectionRows() []tea.Cmd {
 			TaskId:      taskId,
 			Msg: SectionPullRequestsFetchedMsg{
 				Prs:        prs,
-				TotalCount: res.TotalCount,
-				PageInfo:   res.PageInfo,
+				TotalCount: totalCount,
+				PageInfo:   data.PageInfo{HasNextPage: false},
 				TaskId:     taskId,
 			},
 		}
@@ -506,22 +570,72 @@ func (m *Model) ResetRows() {
 	m.BaseModel.ResetRows()
 }
 
+func (m *Model) providersForFetch() []providers.Instance {
+	if data.IsClientOverride() {
+		return nil
+	}
+	if m.ProviderID != "" {
+		provider, ok := m.Ctx.ProviderByID(m.ProviderID)
+		if !ok || provider.Kind != providers.KindGitHub {
+			return nil
+		}
+		return filterAuthenticatedProviders([]providers.Instance{provider})
+	}
+	return filterAuthenticatedProviders(m.Ctx.ProvidersByKind(providers.KindGitHub))
+}
+
+func filterAuthenticatedProviders(instances []providers.Instance) []providers.Instance {
+	out := make([]providers.Instance, 0, len(instances))
+	for _, provider := range instances {
+		if provider.AuthToken == "" {
+			continue
+		}
+		out = append(out, provider)
+	}
+	return out
+}
+
+func fetchPullRequestsForProvider(
+	provider providers.Instance,
+	query string,
+	limit int,
+	pageInfo *data.PageInfo,
+) (data.PullRequestsResponse, error) {
+	if config.IsFeatureEnabled(config.FF_MOCK_DATA) {
+		return data.FetchPullRequests(query, limit, pageInfo)
+	}
+	client, err := gh.NewGraphQLClient(gh.ClientOptions{
+		Host:      provider.Host,
+		AuthToken: provider.AuthToken,
+	})
+	if err != nil {
+		return data.PullRequestsResponse{}, err
+	}
+	return data.FetchPullRequestsWithClient(client, query, limit, pageInfo)
+}
+
 func FetchAllSections(
 	ctx *context.ProgramContext,
 	prs []section.Section,
 ) (sections []section.Section, fetchAllCmd tea.Cmd) {
-	fetchPRsCmds := make([]tea.Cmd, 0, len(ctx.Config.PRSections))
-	sections = make([]section.Section, 0, len(ctx.Config.PRSections))
-	for i, sectionConfig := range ctx.Config.PRSections {
+	configs := ctx.Config.PRSections
+	providers := ctx.ProvidersByKind(providers.KindGitHub)
+	shouldGroup := ctx.GroupByProvider && len(providers) > 0
+	sections = make([]section.Section, 0, len(configs))
+	fetchPRsCmds := make([]tea.Cmd, 0, len(configs))
+
+	index := 1
+	addSection := func(sectionConfig config.PrsSectionConfig, providerID string) {
 		sectionModel := NewModel(
-			i+1, // 0 is the search section
+			index, // 0 is the search section
 			ctx,
 			sectionConfig,
 			time.Now(),
 			time.Now(),
+			providerID,
 		)
-		if len(prs) > 0 && len(prs) >= i+1 && prs[i+1] != nil {
-			oldSection := prs[i+1].(*Model)
+		if len(prs) > 0 && len(prs) >= index && prs[index] != nil {
+			oldSection := prs[index].(*Model)
 			sectionModel.Prs = oldSection.Prs
 			sectionModel.LastFetchTaskId = oldSection.LastFetchTaskId
 		}
@@ -529,10 +643,24 @@ func FetchAllSections(
 			sectionModel.ShowAuthorIcon = !*sectionConfig.Layout.AuthorIcon.Hidden
 		}
 		sections = append(sections, &sectionModel)
-		fetchPRsCmds = append(
-			fetchPRsCmds,
-			sectionModel.FetchNextPageSectionRows()...)
+		fetchPRsCmds = append(fetchPRsCmds, sectionModel.FetchNextPageSectionRows()...)
+		index++
 	}
+
+	if shouldGroup {
+		for _, provider := range providers {
+			for _, sectionConfig := range configs {
+				sectionCopy := sectionConfig
+				sectionCopy.Title = fmt.Sprintf("%s · %s", sectionConfig.Title, provider.DisplayName)
+				addSection(sectionCopy, provider.ID)
+			}
+		}
+	} else {
+		for _, sectionConfig := range configs {
+			addSection(sectionConfig, "")
+		}
+	}
+
 	return sections, tea.Batch(fetchPRsCmds...)
 }
 

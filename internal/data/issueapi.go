@@ -92,6 +92,13 @@ func makeIssuesQuery(query string) string {
 	return fmt.Sprintf("is:issue %s sort:updated", query)
 }
 
+func FetchIssuesWithClient(client *gh.GraphQLClient, query string, limit int, pageInfo *PageInfo) (IssuesResponse, error) {
+	if client == nil {
+		return FetchIssues(query, limit, pageInfo)
+	}
+	return fetchIssues(client, query, limit, pageInfo)
+}
+
 func FetchIssues(query string, limit int, pageInfo *PageInfo) (IssuesResponse, error) {
 	var err error
 	if client == nil {
@@ -102,6 +109,10 @@ func FetchIssues(query string, limit int, pageInfo *PageInfo) (IssuesResponse, e
 		return IssuesResponse{}, err
 	}
 
+	return fetchIssues(client, query, limit, pageInfo)
+}
+
+func fetchIssues(client *gh.GraphQLClient, query string, limit int, pageInfo *PageInfo) (IssuesResponse, error) {
 	var queryResult struct {
 		Search struct {
 			Nodes []struct {
@@ -121,8 +132,7 @@ func FetchIssues(query string, limit int, pageInfo *PageInfo) (IssuesResponse, e
 		"endCursor": (*graphql.String)(endCursor),
 	}
 	log.Debug("Fetching issues", "query", query, "limit", limit, "endCursor", endCursor)
-	err = client.Query("SearchIssues", &queryResult, variables)
-	if err != nil {
+	if err := client.Query("SearchIssues", &queryResult, variables); err != nil {
 		return IssuesResponse{}, err
 	}
 	log.Info("Successfully fetched issues", "query", query, "count", queryResult.Search.IssueCount)

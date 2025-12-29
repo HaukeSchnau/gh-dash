@@ -7,11 +7,13 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	gh "github.com/cli/go-gh/v2/pkg/api"
 
 	"github.com/dlvhdr/gh-dash/v4/internal/config"
 	"github.com/dlvhdr/gh-dash/v4/internal/data"
 	"github.com/dlvhdr/gh-dash/v4/internal/domain"
 	"github.com/dlvhdr/gh-dash/v4/internal/dsl"
+	"github.com/dlvhdr/gh-dash/v4/internal/providers"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/issuerow"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/section"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/table"
@@ -34,6 +36,7 @@ func NewModel(
 	cfg config.IssuesSectionConfig,
 	lastUpdated time.Time,
 	createdAt time.Time,
+	providerID string,
 ) Model {
 	m := Model{}
 	m.BaseModel = section.NewModel(
@@ -41,6 +44,7 @@ func NewModel(
 		section.NewSectionOptions{
 			Id:          id,
 			Config:      cfg.ToSectionConfig(),
+			ProviderID:  providerID,
 			Type:        SectionType,
 			Columns:     GetSectionColumns(cfg, ctx),
 			Singular:    m.GetItemSingularForm(),
@@ -330,19 +334,81 @@ func (m *Model) FetchNextPageSectionRows() []tea.Cmd {
 				}
 			}
 		}
-		res, err := data.FetchIssues(m.GetFilters(), *limit, m.PageInfo)
-		if err != nil {
+		providers := m.providersForFetch()
+		if len(providers) == 0 {
+			res, err := data.FetchIssues(m.GetFilters(), *limit, m.PageInfo)
+			if err != nil {
+				return constants.TaskFinishedMsg{
+					SectionId:   m.Id,
+					SectionType: m.Type,
+					TaskId:      taskId,
+					Err:         err,
+				}
+			}
+
+			issues := make([]domain.Issue, 0, len(res.Issues))
+			for i := range res.Issues {
+				issues = append(issues, domain.NewIssueFromData(res.Issues[i]))
+			}
+
 			return constants.TaskFinishedMsg{
 				SectionId:   m.Id,
 				SectionType: m.Type,
 				TaskId:      taskId,
-				Err:         err,
+				Msg: SectionIssuesFetchedMsg{
+					Issues:     issues,
+					TotalCount: res.TotalCount,
+					PageInfo:   res.PageInfo,
+					TaskId:     taskId,
+				},
 			}
 		}
 
-		issues := make([]domain.Issue, 0, len(res.Issues))
-		for i := range res.Issues {
-			issues = append(issues, domain.NewIssueFromData(res.Issues[i]))
+		if len(providers) == 1 {
+			res, err := fetchIssuesForProvider(providers[0], m.GetFilters(), *limit, m.PageInfo)
+			if err != nil {
+				return constants.TaskFinishedMsg{
+					SectionId:   m.Id,
+					SectionType: m.Type,
+					TaskId:      taskId,
+					Err:         err,
+				}
+			}
+
+			issues := make([]domain.Issue, 0, len(res.Issues))
+			for i := range res.Issues {
+				issues = append(issues, domain.NewIssueFromDataWithProvider(res.Issues[i], providers[0].ID))
+			}
+
+			return constants.TaskFinishedMsg{
+				SectionId:   m.Id,
+				SectionType: m.Type,
+				TaskId:      taskId,
+				Msg: SectionIssuesFetchedMsg{
+					Issues:     issues,
+					TotalCount: res.TotalCount,
+					PageInfo:   res.PageInfo,
+					TaskId:     taskId,
+				},
+			}
+		}
+
+		totalCount := 0
+		issues := make([]domain.Issue, 0, len(providers)*(*limit))
+		for _, provider := range providers {
+			res, err := fetchIssuesForProvider(provider, m.GetFilters(), *limit, nil)
+			if err != nil {
+				return constants.TaskFinishedMsg{
+					SectionId:   m.Id,
+					SectionType: m.Type,
+					TaskId:      taskId,
+					Err:         err,
+				}
+			}
+			totalCount += res.TotalCount
+			for i := range res.Issues {
+				issues = append(issues, domain.NewIssueFromDataWithProvider(res.Issues[i], provider.ID))
+			}
 		}
 
 		return constants.TaskFinishedMsg{
@@ -351,8 +417,8 @@ func (m *Model) FetchNextPageSectionRows() []tea.Cmd {
 			TaskId:      taskId,
 			Msg: SectionIssuesFetchedMsg{
 				Issues:     issues,
-				TotalCount: res.TotalCount,
-				PageInfo:   res.PageInfo,
+				TotalCount: totalCount,
+				PageInfo:   data.PageInfo{HasNextPage: false},
 				TaskId:     taskId,
 			},
 		}
@@ -371,28 +437,91 @@ func (m *Model) ResetRows() {
 	m.BaseModel.ResetRows()
 }
 
+func (m *Model) providersForFetch() []providers.Instance {
+	if data.IsClientOverride() {
+		return nil
+	}
+	if m.ProviderID != "" {
+		provider, ok := m.Ctx.ProviderByID(m.ProviderID)
+		if !ok || provider.Kind != providers.KindGitHub {
+			return nil
+		}
+		return filterAuthenticatedProviders([]providers.Instance{provider})
+	}
+	return filterAuthenticatedProviders(m.Ctx.ProvidersByKind(providers.KindGitHub))
+}
+
+func filterAuthenticatedProviders(instances []providers.Instance) []providers.Instance {
+	out := make([]providers.Instance, 0, len(instances))
+	for _, provider := range instances {
+		if provider.AuthToken == "" {
+			continue
+		}
+		out = append(out, provider)
+	}
+	return out
+}
+
+func fetchIssuesForProvider(
+	provider providers.Instance,
+	query string,
+	limit int,
+	pageInfo *data.PageInfo,
+) (data.IssuesResponse, error) {
+	if config.IsFeatureEnabled(config.FF_MOCK_DATA) {
+		return data.FetchIssues(query, limit, pageInfo)
+	}
+	client, err := gh.NewGraphQLClient(gh.ClientOptions{
+		Host:      provider.Host,
+		AuthToken: provider.AuthToken,
+	})
+	if err != nil {
+		return data.IssuesResponse{}, err
+	}
+	return data.FetchIssuesWithClient(client, query, limit, pageInfo)
+}
+
 func FetchAllSections(
 	ctx *context.ProgramContext,
 ) (sections []section.Section, fetchAllCmd tea.Cmd) {
 	sectionConfigs := ctx.Config.IssuesSections
+	providers := ctx.ProvidersByKind(providers.KindGitHub)
+	shouldGroup := ctx.GroupByProvider && len(providers) > 0
 	fetchIssuesCmds := make([]tea.Cmd, 0, len(sectionConfigs))
 	sections = make([]section.Section, 0, len(sectionConfigs))
-	for i, sectionConfig := range sectionConfigs {
+
+	index := 1
+	addSection := func(sectionConfig config.IssuesSectionConfig, providerID string) {
 		sectionModel := NewModel(
-			i+1,
+			index,
 			ctx,
 			sectionConfig,
 			time.Now(),
 			time.Now(),
+			providerID,
 		) // 0 is the search section
 		if sectionConfig.Layout.CreatorIcon.Hidden != nil {
 			sectionModel.ShowAuthorIcon = !*sectionConfig.Layout.CreatorIcon.Hidden
 		}
 		sections = append(sections, &sectionModel)
-		fetchIssuesCmds = append(
-			fetchIssuesCmds,
-			sectionModel.FetchNextPageSectionRows()...)
+		fetchIssuesCmds = append(fetchIssuesCmds, sectionModel.FetchNextPageSectionRows()...)
+		index++
 	}
+
+	if shouldGroup {
+		for _, provider := range providers {
+			for _, sectionConfig := range sectionConfigs {
+				sectionCopy := sectionConfig
+				sectionCopy.Title = fmt.Sprintf("%s · %s", sectionConfig.Title, provider.DisplayName)
+				addSection(sectionCopy, provider.ID)
+			}
+		}
+	} else {
+		for _, sectionConfig := range sectionConfigs {
+			addSection(sectionConfig, "")
+		}
+	}
+
 	return sections, tea.Batch(fetchIssuesCmds...)
 }
 

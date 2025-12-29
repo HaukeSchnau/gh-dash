@@ -20,6 +20,13 @@ func NewPullRequestFromData(pr data.PullRequestData) PullRequest {
 	}
 }
 
+func NewPullRequestFromDataWithProvider(pr data.PullRequestData, providerID string) PullRequest {
+	return PullRequest{
+		KeyValue: NewWorkItemKey(providerID, pr.Repository.NameWithOwner, pr.Number, WorkItemPullRequest),
+		Primary:  &pr,
+	}
+}
+
 func (pr PullRequest) Key() WorkItemKey {
 	return pr.KeyValue
 }

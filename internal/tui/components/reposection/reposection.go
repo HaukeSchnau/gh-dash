@@ -49,6 +49,7 @@ func NewModel(
 		section.NewSectionOptions{
 			Id:          id,
 			Config:      cfg.ToSectionConfig(),
+			ProviderID:  "",
 			Type:        SectionType,
 			Columns:     GetSectionColumns(ctx, cfg),
 			Singular:    "branch",

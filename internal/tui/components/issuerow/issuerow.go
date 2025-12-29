@@ -64,7 +64,11 @@ func (issue *Issue) renderCreatedAt() string {
 }
 
 func (issue *Issue) renderRepoName() string {
-	repoName := issue.Data.Data.Repository.Name
+	repoName := issue.Data.Data.Repository.NameWithOwner
+	providerLabel := issue.Ctx.ProviderLabel(issue.Data.KeyValue.ProviderID)
+	if providerLabel != "" {
+		repoName = fmt.Sprintf("%s/%s", providerLabel, repoName)
+	}
 	return issue.getTextStyle().Render(repoName)
 }
 

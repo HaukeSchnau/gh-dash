@@ -184,7 +184,12 @@ func (pr *PullRequest) renderExtendedTitle(isSelected bool) string {
 
 	author := baseStyle.Render(fmt.Sprintf("@%s",
 		pr.Data.Primary.GetAuthor(pr.Ctx.Theme, pr.ShowAuthorIcon)))
-	top := lipgloss.JoinHorizontal(lipgloss.Top, pr.Data.Primary.Repository.NameWithOwner,
+	repoName := pr.Data.Primary.Repository.NameWithOwner
+	providerLabel := pr.Ctx.ProviderLabel(pr.Data.KeyValue.ProviderID)
+	if providerLabel != "" {
+		repoName = fmt.Sprintf("%s/%s", providerLabel, repoName)
+	}
+	top := lipgloss.JoinHorizontal(lipgloss.Top, repoName,
 		fmt.Sprintf(" #%d by %s", pr.Data.Primary.Number, author))
 	branchHidden := pr.Ctx.Config.Defaults.Layout.Prs.Base.Hidden
 	if branchHidden == nil || !*branchHidden {
@@ -221,11 +226,18 @@ func (pr *PullRequest) renderAssignees() string {
 }
 
 func (pr *PullRequest) renderRepoName() string {
+	if pr.Data.Primary == nil {
+		return "-"
+	}
 	repoName := ""
 	if !pr.Ctx.Config.Theme.Ui.Table.Compact {
 		repoName = pr.Data.Primary.Repository.NameWithOwner
 	} else {
 		repoName = pr.Data.Primary.HeadRepository.Name
+	}
+	providerLabel := pr.Ctx.ProviderLabel(pr.Data.KeyValue.ProviderID)
+	if providerLabel != "" {
+		repoName = fmt.Sprintf("%s/%s", providerLabel, pr.Data.Primary.Repository.NameWithOwner)
 	}
 	return pr.getTextStyle().Foreground(pr.Ctx.Theme.FaintText).Render(repoName)
 }
