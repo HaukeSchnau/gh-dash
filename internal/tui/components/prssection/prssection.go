@@ -11,6 +11,7 @@ import (
 	"github.com/dlvhdr/gh-dash/v4/internal/config"
 	"github.com/dlvhdr/gh-dash/v4/internal/data"
 	"github.com/dlvhdr/gh-dash/v4/internal/domain"
+	"github.com/dlvhdr/gh-dash/v4/internal/dsl"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/prrow"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/section"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/table"
@@ -453,6 +454,16 @@ func (m *Model) FetchNextPageSectionRows() []tea.Cmd {
 			limit = &m.Ctx.Config.Defaults.PrsLimit
 		}
 
+		if config.IsFeatureEnabled(config.FF_DSL_VALIDATE) {
+			if err := dsl.ValidateFilter(m.GetFilters()); err != nil {
+				return constants.TaskFinishedMsg{
+					SectionId:   m.Id,
+					SectionType: m.Type,
+					TaskId:      taskId,
+					Err:         err,
+				}
+			}
+		}
 		res, err := data.FetchPullRequests(m.GetFilters(), *limit, m.PageInfo)
 		if err != nil {
 			return constants.TaskFinishedMsg{
