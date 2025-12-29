@@ -1,0 +1,7 @@
+hosts:
+  gitlab.com:
+    user: gl-user
+    token: gl-token
+  gitlab.example.com:
+    user: other-user
+    oauth_token: other-token
