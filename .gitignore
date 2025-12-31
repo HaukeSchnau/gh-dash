@@ -10,3 +10,6 @@ docs/broken-links.log
 .devbox
 __debug*
 testdata/gh-schema.graphql
+
+# bv (beads viewer) local config and caches
+.bv/
