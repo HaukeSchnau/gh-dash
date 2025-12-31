@@ -96,7 +96,9 @@ func FetchIssuesWithClient(client *gh.GraphQLClient, query string, limit int, pa
 	if client == nil {
 		return FetchIssues(query, limit, pageInfo)
 	}
-	return fetchIssues(client, query, limit, pageInfo)
+	return retryRead(func() (IssuesResponse, error) {
+		return fetchIssues(client, query, limit, pageInfo)
+	})
 }
 
 func FetchIssues(query string, limit int, pageInfo *PageInfo) (IssuesResponse, error) {
@@ -109,7 +111,9 @@ func FetchIssues(query string, limit int, pageInfo *PageInfo) (IssuesResponse, e
 		return IssuesResponse{}, err
 	}
 
-	return fetchIssues(client, query, limit, pageInfo)
+	return retryRead(func() (IssuesResponse, error) {
+		return fetchIssues(client, query, limit, pageInfo)
+	})
 }
 
 func fetchIssues(client *gh.GraphQLClient, query string, limit int, pageInfo *PageInfo) (IssuesResponse, error) {

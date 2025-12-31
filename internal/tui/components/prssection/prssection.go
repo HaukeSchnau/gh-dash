@@ -5,10 +5,12 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/dlvhdr/gh-dash/v4/internal/config"
 	"github.com/dlvhdr/gh-dash/v4/internal/data"
@@ -570,25 +572,40 @@ func (m *Model) FetchNextPageSectionRows() []tea.Cmd {
 		totalCount := 0
 		prs := make([]domain.PullRequest, 0, len(providers)*(*limit))
 		providerErrors := make(map[string]string)
+		var mu sync.Mutex
+
+		group := errgroup.Group{}
+		group.SetLimit(section.ProviderFetchConcurrency)
 		for _, provider := range providers {
-			query, skip, err := queryForProvider(provider, filters)
-			if err != nil {
-				providerErrors[provider.ID] = err.Error()
-				continue
-			}
-			if skip {
-				continue
-			}
-			res, err := fetchPullRequestsForProvider(provider, query, *limit, nil)
-			if err != nil {
-				providerErrors[provider.ID] = err.Error()
-				continue
-			}
-			totalCount += res.TotalCount
-			for i := range res.Prs {
-				prs = append(prs, domain.NewPullRequestFromDataWithProvider(res.Prs[i], provider.ID))
-			}
+			provider := provider
+			group.Go(func() error {
+				query, skip, err := queryForProvider(provider, filters)
+				if err != nil {
+					mu.Lock()
+					providerErrors[provider.ID] = err.Error()
+					mu.Unlock()
+					return nil
+				}
+				if skip {
+					return nil
+				}
+				res, err := fetchPullRequestsForProvider(provider, query, *limit, nil)
+				if err != nil {
+					mu.Lock()
+					providerErrors[provider.ID] = err.Error()
+					mu.Unlock()
+					return nil
+				}
+				mu.Lock()
+				totalCount += res.TotalCount
+				for i := range res.Prs {
+					prs = append(prs, domain.NewPullRequestFromDataWithProvider(res.Prs[i], provider.ID))
+				}
+				mu.Unlock()
+				return nil
+			})
 		}
+		_ = group.Wait()
 		return constants.TaskFinishedMsg{
 			SectionId:   m.Id,
 			SectionType: m.Type,

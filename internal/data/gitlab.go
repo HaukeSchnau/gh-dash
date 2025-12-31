@@ -70,6 +70,13 @@ func FetchGitLabMergeRequests(
 	if err != nil {
 		return PullRequestsResponse{}, err
 	}
+	if dsl.RequiresCurrentUser(expr) {
+		username, err := CurrentUser(provider)
+		if err != nil {
+			return PullRequestsResponse{}, err
+		}
+		expr = dsl.ExpandCurrentUser(expr, username)
+	}
 	query, err := dsl.TranslateGitLab(expr, time.Now())
 	if err != nil {
 		return PullRequestsResponse{}, err
@@ -84,7 +91,11 @@ func FetchGitLabMergeRequests(
 	}
 	endpoint := "/merge_requests"
 	if query.ProjectPath != "" {
-		endpoint = fmt.Sprintf("/projects/%s/merge_requests", url.PathEscape(query.ProjectPath))
+		projectID, err := gitlabProjectID(provider, query.ProjectPath)
+		if err != nil {
+			return PullRequestsResponse{}, err
+		}
+		endpoint = fmt.Sprintf("/projects/%d/merge_requests", projectID)
 	}
 	body, total, err := gitlabGet(provider, endpoint, params)
 	if err != nil {
@@ -208,6 +219,13 @@ func FetchGitLabIssues(
 	if err != nil {
 		return IssuesResponse{}, err
 	}
+	if dsl.RequiresCurrentUser(expr) {
+		username, err := CurrentUser(provider)
+		if err != nil {
+			return IssuesResponse{}, err
+		}
+		expr = dsl.ExpandCurrentUser(expr, username)
+	}
 	query, err := dsl.TranslateGitLab(expr, time.Now())
 	if err != nil {
 		return IssuesResponse{}, err
@@ -222,7 +240,11 @@ func FetchGitLabIssues(
 	}
 	endpoint := "/issues"
 	if query.ProjectPath != "" {
-		endpoint = fmt.Sprintf("/projects/%s/issues", url.PathEscape(query.ProjectPath))
+		projectID, err := gitlabProjectID(provider, query.ProjectPath)
+		if err != nil {
+			return IssuesResponse{}, err
+		}
+		endpoint = fmt.Sprintf("/projects/%d/issues", projectID)
 	}
 	body, total, err := gitlabGet(provider, endpoint, params)
 	if err != nil {
@@ -271,6 +293,24 @@ func FetchGitLabIssues(
 }
 
 func gitlabGet(provider providers.Instance, endpoint string, params map[string]string) ([]byte, int, error) {
+	type gitlabResponse struct {
+		body  []byte
+		total int
+	}
+	res, err := retryRead(func() (gitlabResponse, error) {
+		body, total, err := doGitLabGet(provider, endpoint, params)
+		if err != nil {
+			return gitlabResponse{}, err
+		}
+		return gitlabResponse{body: body, total: total}, nil
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	return res.body, res.total, nil
+}
+
+func doGitLabGet(provider providers.Instance, endpoint string, params map[string]string) ([]byte, int, error) {
 	baseURL := provider.Host
 	if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
 		baseURL = "https://" + baseURL
@@ -297,7 +337,11 @@ func gitlabGet(provider providers.Instance, endpoint string, params map[string]s
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, 0, fmt.Errorf("gitlab request failed: %s", resp.Status)
+		err := fmt.Errorf("gitlab request failed: %s", resp.Status)
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+			return nil, 0, markRetryable(err)
+		}
+		return nil, 0, err
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

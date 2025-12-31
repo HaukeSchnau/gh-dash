@@ -296,7 +296,9 @@ func FetchPullRequestsWithClient(client *gh.GraphQLClient, query string, limit i
 	if client == nil {
 		return FetchPullRequests(query, limit, pageInfo)
 	}
-	return fetchPullRequests(client, query, limit, pageInfo)
+	return retryRead(func() (PullRequestsResponse, error) {
+		return fetchPullRequests(client, query, limit, pageInfo)
+	})
 }
 
 func FetchPullRequests(query string, limit int, pageInfo *PageInfo) (PullRequestsResponse, error) {
@@ -315,7 +317,9 @@ func FetchPullRequests(query string, limit int, pageInfo *PageInfo) (PullRequest
 		return PullRequestsResponse{}, err
 	}
 
-	return fetchPullRequests(client, query, limit, pageInfo)
+	return retryRead(func() (PullRequestsResponse, error) {
+		return fetchPullRequests(client, query, limit, pageInfo)
+	})
 }
 
 func fetchPullRequests(client *gh.GraphQLClient, query string, limit int, pageInfo *PageInfo) (PullRequestsResponse, error) {
