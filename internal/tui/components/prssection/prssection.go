@@ -3,6 +3,7 @@ package prssection
 import (
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -468,9 +469,10 @@ func (m *Model) FetchNextPageSectionRows() []tea.Cmd {
 				}
 			}
 		}
+		filters := m.GetFilters()
 		providers := m.providersForFetch()
 		if len(providers) == 0 {
-			res, err := data.FetchPullRequests(m.GetFilters(), *limit, m.PageInfo)
+			res, err := data.FetchPullRequests(filters, *limit, m.PageInfo)
 			if err != nil {
 				return constants.TaskFinishedMsg{
 					SectionId:   m.Id,
@@ -498,7 +500,29 @@ func (m *Model) FetchNextPageSectionRows() []tea.Cmd {
 		}
 
 		if len(providers) == 1 {
-			res, err := fetchPullRequestsForProvider(providers[0], m.GetFilters(), *limit, m.PageInfo)
+			query, skip, err := queryForProvider(providers[0], filters)
+			if err != nil {
+				return constants.TaskFinishedMsg{
+					SectionId:   m.Id,
+					SectionType: m.Type,
+					TaskId:      taskId,
+					Err:         err,
+				}
+			}
+			if skip {
+				return constants.TaskFinishedMsg{
+					SectionId:   m.Id,
+					SectionType: m.Type,
+					TaskId:      taskId,
+					Msg: SectionPullRequestsFetchedMsg{
+						Prs:        nil,
+						TotalCount: 0,
+						PageInfo:   data.PageInfo{HasNextPage: false},
+						TaskId:     taskId,
+					},
+				}
+			}
+			res, err := fetchPullRequestsForProvider(providers[0], query, *limit, m.PageInfo)
 			if err != nil {
 				return constants.TaskFinishedMsg{
 					SectionId:   m.Id,
@@ -528,7 +552,19 @@ func (m *Model) FetchNextPageSectionRows() []tea.Cmd {
 		totalCount := 0
 		prs := make([]domain.PullRequest, 0, len(providers)*(*limit))
 		for _, provider := range providers {
-			res, err := fetchPullRequestsForProvider(provider, m.GetFilters(), *limit, nil)
+			query, skip, err := queryForProvider(provider, filters)
+			if err != nil {
+				return constants.TaskFinishedMsg{
+					SectionId:   m.Id,
+					SectionType: m.Type,
+					TaskId:      taskId,
+					Err:         err,
+				}
+			}
+			if skip {
+				continue
+			}
+			res, err := fetchPullRequestsForProvider(provider, query, *limit, nil)
 			if err != nil {
 				return constants.TaskFinishedMsg{
 					SectionId:   m.Id,
@@ -576,12 +612,12 @@ func (m *Model) providersForFetch() []providers.Instance {
 	}
 	if m.ProviderID != "" {
 		provider, ok := m.Ctx.ProviderByID(m.ProviderID)
-		if !ok || provider.Kind != providers.KindGitHub {
+		if !ok {
 			return nil
 		}
 		return filterAuthenticatedProviders([]providers.Instance{provider})
 	}
-	return filterAuthenticatedProviders(m.Ctx.ProvidersByKind(providers.KindGitHub))
+	return filterAuthenticatedProviders(m.Ctx.Providers)
 }
 
 func filterAuthenticatedProviders(instances []providers.Instance) []providers.Instance {
@@ -604,14 +640,91 @@ func fetchPullRequestsForProvider(
 	if config.IsFeatureEnabled(config.FF_MOCK_DATA) {
 		return data.FetchPullRequests(query, limit, pageInfo)
 	}
-	client, err := gh.NewGraphQLClient(gh.ClientOptions{
-		Host:      provider.Host,
-		AuthToken: provider.AuthToken,
-	})
-	if err != nil {
-		return data.PullRequestsResponse{}, err
+	switch provider.Kind {
+	case providers.KindGitHub:
+		client, err := gh.NewGraphQLClient(gh.ClientOptions{
+			Host:      provider.Host,
+			AuthToken: provider.AuthToken,
+		})
+		if err != nil {
+			return data.PullRequestsResponse{}, err
+		}
+		return data.FetchPullRequestsWithClient(client, query, limit, pageInfo)
+	case providers.KindGitLab:
+		return data.FetchGitLabMergeRequests(provider, query, limit)
+	default:
+		return data.PullRequestsResponse{}, fmt.Errorf("unsupported provider: %s", provider.Kind)
 	}
-	return data.FetchPullRequestsWithClient(client, query, limit, pageInfo)
+}
+
+func queryForProvider(provider providers.Instance, filters string) (string, bool, error) {
+	if provider.Kind == providers.KindGitLab && !config.IsFeatureEnabled(config.FF_DSL_VALIDATE) {
+		return "", false, fmt.Errorf("gitlab requires DSL filters")
+	}
+	if !config.IsFeatureEnabled(config.FF_DSL_VALIDATE) {
+		return filters, false, nil
+	}
+	expr, err := dsl.ParseFilter(filters)
+	if err != nil {
+		return "", false, err
+	}
+	switch provider.Kind {
+	case providers.KindGitHub:
+		translated, err := dsl.TranslateGitHub(expr, time.Now())
+		if err != nil {
+			return "", false, err
+		}
+		if !providerAllowed(provider, translated.ProviderFilter) {
+			return "", true, nil
+		}
+		return translated.Query, false, nil
+	case providers.KindGitLab:
+		translated, err := dsl.TranslateGitLab(expr, time.Now())
+		if err != nil {
+			return "", false, err
+		}
+		if !providerAllowed(provider, translated.ProviderFilter) {
+			return "", true, nil
+		}
+		return filters, false, nil
+	default:
+		return "", false, fmt.Errorf("unsupported provider: %s", provider.Kind)
+	}
+}
+
+func providerAllowed(provider providers.Instance, filter dsl.ProviderFilter) bool {
+	if len(filter.Include) > 0 {
+		ok := false
+		for _, item := range filter.Include {
+			if providerMatches(provider, item) {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return false
+		}
+	}
+	for _, item := range filter.Exclude {
+		if providerMatches(provider, item) {
+			return false
+		}
+	}
+	return true
+}
+
+func providerMatches(provider providers.Instance, pattern string) bool {
+	pattern = strings.TrimSpace(pattern)
+	if pattern == "" {
+		return false
+	}
+	if pattern == string(provider.Kind) || pattern == string(provider.Kind)+":*" {
+		return true
+	}
+	if strings.HasSuffix(pattern, ":*") {
+		return strings.HasPrefix(provider.ID, strings.TrimSuffix(pattern, "*"))
+	}
+	return provider.ID == pattern
 }
 
 func FetchAllSections(
