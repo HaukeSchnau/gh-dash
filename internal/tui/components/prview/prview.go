@@ -12,6 +12,7 @@ import (
 
 	"github.com/dlvhdr/gh-dash/v4/internal/data"
 	"github.com/dlvhdr/gh-dash/v4/internal/domain"
+	"github.com/dlvhdr/gh-dash/v4/internal/providers"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/common"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/carousel"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/inputbox"
@@ -45,17 +46,23 @@ type Model struct {
 	isUnassigning     bool
 	summaryViewMore   bool
 
-	inputBox inputbox.Model
+	inputBox     inputbox.Model
+	capabilities *providers.Capabilities
 }
 
-var tabs = []string{" Overview", " Checks", " Activity", " Files Changed"}
+const (
+	tabOverview = " Overview"
+	tabChecks   = " Checks"
+	tabActivity = " Activity"
+	tabFiles    = " Files Changed"
+)
 
 func NewModel(ctx *context.ProgramContext) Model {
 	inputBox := inputbox.NewModel(ctx)
 	inputBox.SetHeight(common.InputBoxHeight)
 
 	c := carousel.New(
-		carousel.WithItems(tabs),
+		carousel.WithItems(tabsForCapabilities(nil)),
 		carousel.WithWidth(ctx.MainContentWidth),
 	)
 
@@ -213,7 +220,7 @@ func (m Model) View() string {
 	body := strings.Builder{}
 
 	switch m.carousel.SelectedItem() {
-	case tabs[0]:
+	case tabOverview:
 		labels := m.renderLabels()
 		if labels != "" {
 			body.WriteString(labels)
@@ -221,27 +228,31 @@ func (m Model) View() string {
 		}
 
 		body.WriteString(m.renderSummary())
-		body.WriteString("\n\n")
-		body.WriteString(m.ctx.Styles.Common.MainTextStyle.MarginBottom(1).Underline(true).Render(" Changes"))
-		body.WriteString("\n")
-		body.WriteString(m.renderChangesOverview())
-		body.WriteString("\n\n")
-		body.WriteString(m.ctx.Styles.Common.MainTextStyle.MarginBottom(1).Underline(true).Render(" Checks"))
-		body.WriteString("\n")
-		body.WriteString(m.renderChecksOverview())
+		if m.supportsFiles() {
+			body.WriteString("\n\n")
+			body.WriteString(m.ctx.Styles.Common.MainTextStyle.MarginBottom(1).Underline(true).Render(" Changes"))
+			body.WriteString("\n")
+			body.WriteString(m.renderChangesOverview())
+		}
+		if m.supportsChecks() {
+			body.WriteString("\n\n")
+			body.WriteString(m.ctx.Styles.Common.MainTextStyle.MarginBottom(1).Underline(true).Render(" Checks"))
+			body.WriteString("\n")
+			body.WriteString(m.renderChecksOverview())
+		}
 
 		if m.isCommenting || m.isApproving || m.isAssigning || m.isUnassigning {
 			body.WriteString(m.inputBox.View())
 		}
 
-	case tabs[1]:
+	case tabChecks:
 		body.WriteString(m.renderChecksOverview())
 		body.WriteString("\n\n")
 		body.WriteString(m.renderChecks())
 
-	case tabs[2]:
+	case tabActivity:
 		body.WriteString(m.renderActivity())
-	case tabs[3]:
+	case tabFiles:
 		body.WriteString(m.renderChangedFiles())
 	}
 
@@ -398,6 +409,7 @@ func (m *Model) SetRow(d *domain.PullRequest) {
 	} else {
 		m.pr = &prrow.PullRequest{Ctx: m.ctx, Data: d}
 	}
+	m.setTabsForCurrentPR()
 }
 
 type EnrichedPrMsg struct {
@@ -446,6 +458,42 @@ func (m *Model) UpdateProgramContext(ctx *context.ProgramContext) {
 			Selected: lipgloss.NewStyle().Padding(0, 1).Bold(true),
 		},
 	)
+}
+
+func tabsForCapabilities(caps *providers.Capabilities) []string {
+	items := []string{tabOverview}
+	if caps == nil || caps.SupportsChecks {
+		items = append(items, tabChecks)
+	}
+	items = append(items, tabActivity)
+	if caps == nil || caps.SupportsFiles {
+		items = append(items, tabFiles)
+	}
+	return items
+}
+
+func (m *Model) setTabsForCurrentPR() {
+	if m.ctx == nil || m.pr == nil || m.pr.Data == nil {
+		m.capabilities = nil
+		m.carousel.SetItems(tabsForCapabilities(nil))
+		return
+	}
+	if provider, ok := m.ctx.ProviderForItem(m.pr.Data); ok {
+		caps := provider.Capabilities
+		m.capabilities = &caps
+		m.carousel.SetItems(tabsForCapabilities(m.capabilities))
+		return
+	}
+	m.capabilities = nil
+	m.carousel.SetItems(tabsForCapabilities(nil))
+}
+
+func (m *Model) supportsChecks() bool {
+	return m.capabilities == nil || m.capabilities.SupportsChecks
+}
+
+func (m *Model) supportsFiles() bool {
+	return m.capabilities == nil || m.capabilities.SupportsFiles
 }
 
 func (m *Model) shouldCancelComment() bool {

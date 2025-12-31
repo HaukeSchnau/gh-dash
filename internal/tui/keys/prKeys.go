@@ -7,6 +7,7 @@ import (
 	log "github.com/charmbracelet/log"
 
 	"github.com/dlvhdr/gh-dash/v4/internal/config"
+	"github.com/dlvhdr/gh-dash/v4/internal/providers"
 )
 
 type PRKeyMap struct {
@@ -101,24 +102,40 @@ var PRKeys = PRKeyMap{
 }
 
 func PRFullHelp() []key.Binding {
-	return []key.Binding{
+	caps := prCapabilities()
+	bindings := []key.Binding{
 		PRKeys.PrevSidebarTab,
 		PRKeys.NextSidebarTab,
-		PRKeys.Approve,
-		PRKeys.Assign,
-		PRKeys.Unassign,
-		PRKeys.Comment,
-		PRKeys.Diff,
-		PRKeys.Checkout,
-		PRKeys.Close,
-		PRKeys.Ready,
-		PRKeys.Reopen,
-		PRKeys.Merge,
-		PRKeys.Update,
-		PRKeys.WatchChecks,
+	}
+	if supports(caps, func(c providers.Capabilities) bool { return c.SupportsApprovals }) {
+		bindings = append(bindings, PRKeys.Approve)
+	}
+	bindings = append(bindings, PRKeys.Assign, PRKeys.Unassign, PRKeys.Comment)
+	if supports(caps, func(c providers.Capabilities) bool { return c.SupportsDiff }) {
+		bindings = append(bindings, PRKeys.Diff)
+	}
+	if supports(caps, func(c providers.Capabilities) bool { return c.SupportsCheckout }) {
+		bindings = append(bindings, PRKeys.Checkout)
+	}
+	bindings = append(bindings, PRKeys.Close)
+	if supports(caps, func(c providers.Capabilities) bool { return c.SupportsReady }) {
+		bindings = append(bindings, PRKeys.Ready)
+	}
+	bindings = append(bindings, PRKeys.Reopen)
+	if supports(caps, func(c providers.Capabilities) bool { return c.SupportsMerge }) {
+		bindings = append(bindings, PRKeys.Merge)
+	}
+	if supports(caps, func(c providers.Capabilities) bool { return c.SupportsUpdateBranch }) {
+		bindings = append(bindings, PRKeys.Update)
+	}
+	if supports(caps, func(c providers.Capabilities) bool { return c.SupportsChecks }) {
+		bindings = append(bindings, PRKeys.WatchChecks)
+	}
+	bindings = append(bindings,
 		PRKeys.ToggleSmartFiltering,
 		PRKeys.ViewIssues,
-	}
+	)
+	return bindings
 }
 
 func rebindPRKeys(keys []config.Keybinding) error {

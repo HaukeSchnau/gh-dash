@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/gen2brain/beeep"
 
+	"github.com/dlvhdr/gh-dash/v4/internal/providers"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/prrow"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/tasks"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/constants"
@@ -19,6 +20,11 @@ func (m *Model) watchChecks() tea.Cmd {
 	pr := m.GetCurrRow()
 	if pr == nil {
 		return nil
+	}
+	if provider, ok := m.Ctx.ProviderForItem(pr); ok && provider.Kind == providers.KindGitLab {
+		return func() tea.Msg {
+			return constants.ErrMsg{Err: fmt.Errorf("checks are not supported for gitlab")}
+		}
 	}
 
 	prNumber := pr.GetNumber()

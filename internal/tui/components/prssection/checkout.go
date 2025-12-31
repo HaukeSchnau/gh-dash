@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/dlvhdr/gh-dash/v4/internal/providers"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/common"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/constants"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/context"
@@ -18,6 +19,9 @@ func (m *Model) checkout() (tea.Cmd, error) {
 	pr := m.GetCurrRow()
 	if pr == nil {
 		return nil, errors.New("no pr selected")
+	}
+	if provider, ok := m.Ctx.ProviderForItem(pr); ok && provider.Kind == providers.KindGitLab {
+		return nil, errors.New("checkout is not supported for gitlab")
 	}
 
 	repoName := pr.GetRepoNameWithOwner()

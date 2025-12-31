@@ -769,10 +769,36 @@ func (m *Model) setCurrSectionId(newSectionId int) {
 func (m *Model) onViewedRowChanged() tea.Cmd {
 	m.prView.SetSummaryViewLess()
 	m.prView.GoToFirstTab()
+	m.updateActiveKeyHelp()
 	m.syncSidebar()
 	cmd := m.prView.EnrichCurrRow()
 	m.sidebar.ScrollToTop()
 	return cmd
+}
+
+func (m *Model) updateActiveKeyHelp() {
+	currRowData := m.getCurrRowData()
+	switch row := currRowData.(type) {
+	case *domain.PullRequest:
+		if provider, ok := m.ctx.ProviderByID(row.Key().ProviderID); ok {
+			caps := provider.Capabilities
+			keys.SetActivePRCapabilities(&caps)
+		} else {
+			keys.SetActivePRCapabilities(nil)
+		}
+		keys.SetActiveIssueCapabilities(nil)
+	case *domain.Issue:
+		if provider, ok := m.ctx.ProviderByID(row.Key().ProviderID); ok {
+			caps := provider.Capabilities
+			keys.SetActiveIssueCapabilities(&caps)
+		} else {
+			keys.SetActiveIssueCapabilities(nil)
+		}
+		keys.SetActivePRCapabilities(nil)
+	default:
+		keys.SetActivePRCapabilities(nil)
+		keys.SetActiveIssueCapabilities(nil)
+	}
 }
 
 func (m *Model) onWindowSizeChanged(msg tea.WindowSizeMsg) {

@@ -104,6 +104,17 @@ func (ctx *ProgramContext) ProviderForItem(item domain.WorkItem) (providers.Inst
 	return ctx.ProviderByID(key.ProviderID)
 }
 
+func (ctx *ProgramContext) CapabilitiesForProviderID(providerID string) (providers.Capabilities, bool) {
+	if providerID == "" {
+		return providers.Capabilities{}, false
+	}
+	provider, ok := ctx.ProviderByID(providerID)
+	if !ok {
+		return providers.Capabilities{}, false
+	}
+	return provider.Capabilities, true
+}
+
 func (ctx *ProgramContext) ProviderLabel(providerID string) string {
 	if providerID == "" {
 		return ""

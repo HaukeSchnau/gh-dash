@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/dlvhdr/gh-dash/v4/internal/providers"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/constants"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/ghcli"
 )
@@ -12,6 +13,11 @@ func (m Model) diff() tea.Cmd {
 	currRowData := m.GetCurrRow()
 	if currRowData == nil {
 		return nil
+	}
+	if provider, ok := m.Ctx.ProviderForItem(currRowData); ok && provider.Kind == providers.KindGitLab {
+		return func() tea.Msg {
+			return constants.ErrMsg{Err: fmt.Errorf("diff is not supported for gitlab")}
+		}
 	}
 
 	c := ghcli.CommandForItem(m.Ctx, currRowData, "pr", "diff", fmt.Sprint(currRowData.GetNumber()), "-R", m.GetCurrRow().GetRepoNameWithOwner())

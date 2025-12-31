@@ -46,7 +46,7 @@ func NewModel(
 			Config:      cfg.ToSectionConfig(),
 			ProviderID:  providerID,
 			Type:        SectionType,
-			Columns:     GetSectionColumns(cfg, ctx),
+			Columns:     GetSectionColumns(cfg, ctx, providerID),
 			Singular:    m.GetItemSingularForm(),
 			Plural:      m.GetItemPluralForm(),
 			LastUpdated: lastUpdated,
@@ -185,6 +185,7 @@ func (m *Model) Update(msg tea.Msg) (section.Section, tea.Cmd) {
 func GetSectionColumns(
 	cfg config.IssuesSectionConfig,
 	ctx *context.ProgramContext,
+	providerID string,
 ) []table.Column {
 	dLayout := ctx.Config.Defaults.Layout.Issues
 	sLayout := cfg.Layout
@@ -213,6 +214,11 @@ func GetSectionColumns(
 		dLayout.Reactions,
 		sLayout.Reactions,
 	)
+	if caps, ok := ctx.CapabilitiesForProviderID(providerID); ok {
+		if !caps.SupportsReactions {
+			reactionsLayout.Hidden = utils.BoolPtr(true)
+		}
+	}
 
 	return []table.Column{
 		{
