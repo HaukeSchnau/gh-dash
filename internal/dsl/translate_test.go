@@ -84,3 +84,45 @@ func TestTranslateProviderFilterExtraction(t *testing.T) {
 		t.Fatalf("unexpected query: %q", query.Query)
 	}
 }
+
+func TestTranslateGitHubUnsupportedPredicate(t *testing.T) {
+	expr, err := ParseFilter(`type != "pr"`)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	_, err = TranslateGitHub(expr, time.Now())
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if err.Error() != "github does not support predicate type" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestTranslateGitLabUnsupportedOperator(t *testing.T) {
+	expr, err := ParseFilter(`state != "open"`)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	_, err = TranslateGitLab(expr, time.Now())
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if err.Error() != "gitlab does not support predicate state" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestTranslateGitLabMultipleProjectsError(t *testing.T) {
+	expr, err := ParseFilter(`project = "group/repo" and project = "other/repo"`)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	_, err = TranslateGitLab(expr, time.Now())
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if err.Error() != "multiple project predicates are not supported" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
