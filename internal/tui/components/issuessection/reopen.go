@@ -4,6 +4,9 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/dlvhdr/gh-dash/v4/internal/data"
+	"github.com/dlvhdr/gh-dash/v4/internal/providers"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/constants"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/context"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/ghcli"
@@ -23,9 +26,13 @@ func (m *Model) reopen() tea.Cmd {
 	}
 	startCmd := m.Ctx.StartTask(task)
 	return tea.Batch(startCmd, func() tea.Msg {
-		c := ghcli.CommandForItem(m.Ctx, issue, "issue", "reopen", fmt.Sprint(issueNumber), "-R", issue.GetRepoNameWithOwner())
-
-		err := c.Run()
+		var err error
+		if provider, ok := m.Ctx.ProviderForItem(issue); ok && provider.Kind == providers.KindGitLab {
+			err = data.GitLabSetIssueState(provider, issue.Key().RepoPath, issueNumber, "reopen")
+		} else {
+			c := ghcli.CommandForItem(m.Ctx, issue, "issue", "reopen", fmt.Sprint(issueNumber), "-R", issue.GetRepoNameWithOwner())
+			err = c.Run()
+		}
 		return constants.TaskFinishedMsg{
 			SectionId:   m.Id,
 			SectionType: SectionType,

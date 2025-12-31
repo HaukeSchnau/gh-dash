@@ -10,6 +10,7 @@ import (
 
 	"github.com/dlvhdr/gh-dash/v4/internal/data"
 	"github.com/dlvhdr/gh-dash/v4/internal/domain"
+	"github.com/dlvhdr/gh-dash/v4/internal/providers"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/constants"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/context"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/ghcli"
@@ -99,6 +100,31 @@ func OpenBranchPR(ctx *context.ProgramContext, section SectionIdentifier, branch
 
 func ReopenPR(ctx *context.ProgramContext, section SectionIdentifier, pr domain.WorkItem) tea.Cmd {
 	prNumber := pr.GetNumber()
+	if provider, ok := ctx.ProviderForItem(pr); ok && provider.Kind == providers.KindGitLab {
+		taskId := buildTaskId("pr_reopen", prNumber)
+		task := context.Task{
+			Id:           taskId,
+			StartText:    fmt.Sprintf("Reopening PR #%d", prNumber),
+			FinishedText: fmt.Sprintf("PR #%d has been reopened", prNumber),
+			State:        context.TaskStart,
+			Error:        nil,
+		}
+		startCmd := ctx.StartTask(task)
+		return tea.Batch(startCmd, func() tea.Msg {
+			err := data.GitLabSetMergeRequestState(provider, pr.Key().RepoPath, prNumber, "reopen")
+			return constants.TaskFinishedMsg{
+				SectionId:   section.Id,
+				SectionType: section.Type,
+				TaskId:      taskId,
+				Err:         err,
+				Msg: UpdatePRMsg{
+					Key:      pr.Key(),
+					PrNumber: prNumber,
+					IsClosed: utils.BoolPtr(false),
+				},
+			}
+		})
+	}
 	return fireTask(ctx, GitHubTask{
 		Id:           buildTaskId("pr_reopen", prNumber),
 		Command:      ghcli.CommandForItem(ctx, pr, "pr", "reopen", fmt.Sprint(prNumber), "-R", pr.GetRepoNameWithOwner()),
@@ -117,6 +143,31 @@ func ReopenPR(ctx *context.ProgramContext, section SectionIdentifier, pr domain.
 
 func ClosePR(ctx *context.ProgramContext, section SectionIdentifier, pr domain.WorkItem) tea.Cmd {
 	prNumber := pr.GetNumber()
+	if provider, ok := ctx.ProviderForItem(pr); ok && provider.Kind == providers.KindGitLab {
+		taskId := buildTaskId("pr_close", prNumber)
+		task := context.Task{
+			Id:           taskId,
+			StartText:    fmt.Sprintf("Closing PR #%d", prNumber),
+			FinishedText: fmt.Sprintf("PR #%d has been closed", prNumber),
+			State:        context.TaskStart,
+			Error:        nil,
+		}
+		startCmd := ctx.StartTask(task)
+		return tea.Batch(startCmd, func() tea.Msg {
+			err := data.GitLabSetMergeRequestState(provider, pr.Key().RepoPath, prNumber, "close")
+			return constants.TaskFinishedMsg{
+				SectionId:   section.Id,
+				SectionType: section.Type,
+				TaskId:      taskId,
+				Err:         err,
+				Msg: UpdatePRMsg{
+					Key:      pr.Key(),
+					PrNumber: prNumber,
+					IsClosed: utils.BoolPtr(true),
+				},
+			}
+		})
+	}
 	return fireTask(ctx, GitHubTask{
 		Id:           buildTaskId("pr_close", prNumber),
 		Command:      ghcli.CommandForItem(ctx, pr, "pr", "close", fmt.Sprint(prNumber), "-R", pr.GetRepoNameWithOwner()),
@@ -135,6 +186,25 @@ func ClosePR(ctx *context.ProgramContext, section SectionIdentifier, pr domain.W
 
 func PRReady(ctx *context.ProgramContext, section SectionIdentifier, pr domain.WorkItem) tea.Cmd {
 	prNumber := pr.GetNumber()
+	if provider, ok := ctx.ProviderForItem(pr); ok && provider.Kind == providers.KindGitLab {
+		taskId := buildTaskId("pr_ready", prNumber)
+		task := context.Task{
+			Id:           taskId,
+			StartText:    fmt.Sprintf("Marking PR #%d as ready for review", prNumber),
+			FinishedText: fmt.Sprintf("PR #%d has been marked as ready for review", prNumber),
+			State:        context.TaskStart,
+			Error:        nil,
+		}
+		startCmd := ctx.StartTask(task)
+		return tea.Batch(startCmd, func() tea.Msg {
+			return constants.TaskFinishedMsg{
+				SectionId:   section.Id,
+				SectionType: section.Type,
+				TaskId:      taskId,
+				Err:         fmt.Errorf("mark ready is not supported for gitlab"),
+			}
+		})
+	}
 	return fireTask(ctx, GitHubTask{
 		Id:           buildTaskId("pr_ready", prNumber),
 		Command:      ghcli.CommandForItem(ctx, pr, "pr", "ready", fmt.Sprint(prNumber), "-R", pr.GetRepoNameWithOwner()),
@@ -153,8 +223,6 @@ func PRReady(ctx *context.ProgramContext, section SectionIdentifier, pr domain.W
 
 func MergePR(ctx *context.ProgramContext, section SectionIdentifier, pr domain.WorkItem) tea.Cmd {
 	prNumber := pr.GetNumber()
-	c := ghcli.CommandForItem(ctx, pr, "pr", "merge", fmt.Sprint(prNumber), "-R", pr.GetRepoNameWithOwner())
-
 	taskId := fmt.Sprintf("merge_%d", prNumber)
 	task := context.Task{
 		Id:           taskId,
@@ -165,6 +233,25 @@ func MergePR(ctx *context.ProgramContext, section SectionIdentifier, pr domain.W
 	}
 	startCmd := ctx.StartTask(task)
 
+	if provider, ok := ctx.ProviderForItem(pr); ok && provider.Kind == providers.KindGitLab {
+		return tea.Batch(startCmd, func() tea.Msg {
+			err := data.GitLabMergeRequestMerge(provider, pr.Key().RepoPath, prNumber)
+			isMerged := err == nil
+			return constants.TaskFinishedMsg{
+				SectionId:   section.Id,
+				SectionType: section.Type,
+				TaskId:      taskId,
+				Err:         err,
+				Msg: UpdatePRMsg{
+					Key:      pr.Key(),
+					PrNumber: prNumber,
+					IsMerged: &isMerged,
+				},
+			}
+		})
+	}
+
+	c := ghcli.CommandForItem(ctx, pr, "pr", "merge", fmt.Sprint(prNumber), "-R", pr.GetRepoNameWithOwner())
 	return tea.Batch(startCmd, tea.ExecProcess(c, func(err error) tea.Msg {
 		isMerged := err == nil && c.ProcessState.ExitCode() == 0
 
@@ -210,6 +297,25 @@ func CreatePR(ctx *context.ProgramContext, section SectionIdentifier, branchName
 
 func UpdatePR(ctx *context.ProgramContext, section SectionIdentifier, pr domain.WorkItem) tea.Cmd {
 	prNumber := pr.GetNumber()
+	if provider, ok := ctx.ProviderForItem(pr); ok && provider.Kind == providers.KindGitLab {
+		taskId := buildTaskId("pr_update", prNumber)
+		task := context.Task{
+			Id:           taskId,
+			StartText:    fmt.Sprintf("Updating PR #%d", prNumber),
+			FinishedText: fmt.Sprintf("PR #%d has been updated", prNumber),
+			State:        context.TaskStart,
+			Error:        nil,
+		}
+		startCmd := ctx.StartTask(task)
+		return tea.Batch(startCmd, func() tea.Msg {
+			return constants.TaskFinishedMsg{
+				SectionId:   section.Id,
+				SectionType: section.Type,
+				TaskId:      taskId,
+				Err:         fmt.Errorf("update branch is not supported for gitlab"),
+			}
+		})
+	}
 	return fireTask(ctx, GitHubTask{
 		Id:           buildTaskId("pr_update", prNumber),
 		Command:      ghcli.CommandForItem(ctx, pr, "pr", "update-branch", fmt.Sprint(prNumber), "-R", pr.GetRepoNameWithOwner()),

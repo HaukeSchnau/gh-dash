@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/dlvhdr/gh-dash/v4/internal/data"
+	"github.com/dlvhdr/gh-dash/v4/internal/providers"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/issuessection"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/constants"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/context"
@@ -38,11 +39,18 @@ func (m *Model) assign(usernames []string) tea.Cmd {
 
 	startCmd := m.ctx.StartTask(task)
 	return tea.Batch(startCmd, func() tea.Msg {
-		c := ghcli.CommandForItem(m.ctx, issue, commandArgs...)
-
-		err := c.Run()
+		var err error
+		assignees := m.issueAssignees()
+		addedAssignees := newAssignees(assignees, usernames)
+		if provider, ok := m.ctx.ProviderForItem(issue); ok && provider.Kind == providers.KindGitLab {
+			nextAssignees := append(assignees, addedAssignees...)
+			err = data.GitLabSetIssueAssignees(provider, issue.Key().RepoPath, issueNumber, nextAssignees)
+		} else {
+			c := ghcli.CommandForItem(m.ctx, issue, commandArgs...)
+			err = c.Run()
+		}
 		returnedAssignees := data.Assignees{Nodes: []data.Assignee{}}
-		for _, assignee := range usernames {
+		for _, assignee := range addedAssignees {
 			returnedAssignees.Nodes = append(returnedAssignees.Nodes, data.Assignee{Login: assignee})
 		}
 		return constants.TaskFinishedMsg{

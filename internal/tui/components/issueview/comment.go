@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/dlvhdr/gh-dash/v4/internal/data"
+	"github.com/dlvhdr/gh-dash/v4/internal/providers"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/issuessection"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/constants"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/context"
@@ -26,9 +27,13 @@ func (m *Model) comment(body string) tea.Cmd {
 	}
 	startCmd := m.ctx.StartTask(task)
 	return tea.Batch(startCmd, func() tea.Msg {
-		c := ghcli.CommandForItem(m.ctx, issue, "issue", "comment", fmt.Sprint(issueNumber), "-R", issue.GetRepoNameWithOwner(), "-b", body)
-
-		err := c.Run()
+		var err error
+		if provider, ok := m.ctx.ProviderForItem(issue); ok && provider.Kind == providers.KindGitLab {
+			err = data.GitLabIssueComment(provider, issue.Key().RepoPath, issueNumber, body)
+		} else {
+			c := ghcli.CommandForItem(m.ctx, issue, "issue", "comment", fmt.Sprint(issueNumber), "-R", issue.GetRepoNameWithOwner(), "-b", body)
+			err = c.Run()
+		}
 		return constants.TaskFinishedMsg{
 			SectionId:   m.sectionId,
 			SectionType: issuessection.SectionType,

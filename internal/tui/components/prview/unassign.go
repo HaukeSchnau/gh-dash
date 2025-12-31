@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/dlvhdr/gh-dash/v4/internal/data"
+	"github.com/dlvhdr/gh-dash/v4/internal/providers"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/prssection"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/tasks"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/constants"
@@ -39,11 +40,18 @@ func (m *Model) unassign(usernames []string) tea.Cmd {
 
 	startCmd := m.ctx.StartTask(task)
 	return tea.Batch(startCmd, func() tea.Msg {
-		c := ghcli.CommandForItem(m.ctx, m.pr.Data, commandArgs...)
-
-		err := c.Run()
+		var err error
+		assignees := m.prAssignees()
+		removedAssignees := assigneesToRemove(assignees, usernames)
+		if provider, ok := m.ctx.ProviderForItem(m.pr.Data); ok && provider.Kind == providers.KindGitLab {
+			nextAssignees := remainingAssignees(assignees, usernames)
+			err = data.GitLabSetMergeRequestAssignees(provider, m.pr.Data.Key().RepoPath, prNumber, nextAssignees)
+		} else {
+			c := ghcli.CommandForItem(m.ctx, m.pr.Data, commandArgs...)
+			err = c.Run()
+		}
 		returnedAssignees := data.Assignees{Nodes: []data.Assignee{}}
-		for _, assignee := range usernames {
+		for _, assignee := range removedAssignees {
 			returnedAssignees.Nodes = append(returnedAssignees.Nodes, data.Assignee{Login: assignee})
 		}
 		return constants.TaskFinishedMsg{

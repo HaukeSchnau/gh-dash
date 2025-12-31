@@ -102,6 +102,14 @@ func FetchGitLabMergeRequests(
 		createdAt, _ := time.Parse(time.RFC3339, item.CreatedAt)
 		updatedAt, _ := time.Parse(time.RFC3339, item.UpdatedAt)
 		repoName := path.Base(projectPath)
+		assignees := make([]Assignee, 0, len(item.Assignees))
+		for _, assignee := range item.Assignees {
+			assignees = append(assignees, Assignee{Login: assignee.Username})
+		}
+		labels := make([]Label, 0, len(item.Labels))
+		for _, label := range item.Labels {
+			labels = append(labels, Label{Name: label})
+		}
 		prs = append(prs, PullRequestData{
 			Number:         item.IID,
 			Title:          item.Title,
@@ -118,6 +126,8 @@ func FetchGitLabMergeRequests(
 			ReviewThreads:  ReviewThreads{TotalCount: 0},
 			Reviews:        Reviews{TotalCount: 0},
 			Author:         struct{ Login string }{Login: item.Author.Username},
+			Assignees:      Assignees{Nodes: assignees},
+			Labels:         PRLabels{Nodes: labels},
 		})
 	}
 
@@ -160,6 +170,14 @@ func FetchGitLabMergeRequestByBranch(
 	repoName := path.Base(project)
 	createdAt, _ := time.Parse(time.RFC3339, item.CreatedAt)
 	updatedAt, _ := time.Parse(time.RFC3339, item.UpdatedAt)
+	assignees := make([]Assignee, 0, len(item.Assignees))
+	for _, assignee := range item.Assignees {
+		assignees = append(assignees, Assignee{Login: assignee.Username})
+	}
+	labels := make([]Label, 0, len(item.Labels))
+	for _, label := range item.Labels {
+		labels = append(labels, Label{Name: label})
+	}
 	return PullRequestData{
 		Number:         item.IID,
 		Title:          item.Title,
@@ -176,6 +194,8 @@ func FetchGitLabMergeRequestByBranch(
 		ReviewThreads:  ReviewThreads{TotalCount: 0},
 		Reviews:        Reviews{TotalCount: 0},
 		Author:         struct{ Login string }{Login: item.Author.Username},
+		Assignees:      Assignees{Nodes: assignees},
+		Labels:         PRLabels{Nodes: labels},
 	}, nil
 }
 
@@ -345,7 +365,7 @@ func providerAllowed(provider providers.Instance, filter dsl.ProviderFilter) boo
 	if len(filter.Include) > 0 {
 		ok := false
 		for _, item := range filter.Include {
-			if providerMatches(provider, item) {
+			if providers.MatchesPattern(provider, item) {
 				ok = true
 				break
 			}
@@ -355,23 +375,9 @@ func providerAllowed(provider providers.Instance, filter dsl.ProviderFilter) boo
 		}
 	}
 	for _, item := range filter.Exclude {
-		if providerMatches(provider, item) {
+		if providers.MatchesPattern(provider, item) {
 			return false
 		}
 	}
 	return true
-}
-
-func providerMatches(provider providers.Instance, pattern string) bool {
-	pattern = strings.TrimSpace(pattern)
-	if pattern == "" {
-		return false
-	}
-	if pattern == string(provider.Kind) || pattern == string(provider.Kind)+":*" {
-		return true
-	}
-	if strings.HasSuffix(pattern, ":*") {
-		return strings.HasPrefix(provider.ID, strings.TrimSuffix(pattern, "*"))
-	}
-	return provider.ID == pattern
 }

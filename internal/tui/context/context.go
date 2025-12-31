@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/dlvhdr/gh-dash/v4/internal/config"
+	"github.com/dlvhdr/gh-dash/v4/internal/domain"
 	"github.com/dlvhdr/gh-dash/v4/internal/providers"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/theme"
 	"github.com/dlvhdr/gh-dash/v4/internal/utils"
@@ -90,6 +91,17 @@ func (ctx *ProgramContext) ProviderByID(providerID string) (providers.Instance, 
 		}
 	}
 	return providers.Instance{}, false
+}
+
+func (ctx *ProgramContext) ProviderForItem(item domain.WorkItem) (providers.Instance, bool) {
+	if ctx == nil || item == nil {
+		return providers.Instance{}, false
+	}
+	key := item.Key()
+	if key.ProviderID == "" {
+		return providers.Instance{}, false
+	}
+	return ctx.ProviderByID(key.ProviderID)
 }
 
 func (ctx *ProgramContext) ProviderLabel(providerID string) string {
