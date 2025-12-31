@@ -139,6 +139,10 @@ func (m *Model) runCustomCommand(commandTemplate string, contextData *map[string
 		if repoPath, ok := common.GetRepoLocalPath(input["RepoName"].(string), m.ctx.Config.RepoPaths); ok {
 			input["RepoPath"] = repoPath
 		}
+	} else if input["ProjectPath"] != nil {
+		if repoPath, ok := common.GetRepoLocalPath(input["ProjectPath"].(string), m.ctx.Config.RepoPaths); ok {
+			input["RepoPath"] = repoPath
+		}
 	}
 
 	cmd, err := template.New("keybinding_command").Parse(commandTemplate)
@@ -161,20 +165,36 @@ func (m *Model) runCustomCommand(commandTemplate string, contextData *map[string
 }
 
 func (m *Model) runCustomPRCommand(commandTemplate string, prData *domain.PullRequest) tea.Cmd {
+	templateVars := m.workItemTemplateVars(prData)
 	return m.runCustomCommand(commandTemplate,
 		&map[string]any{
-			"RepoName":    prData.GetRepoNameWithOwner(),
-			"PrNumber":    prData.GetNumber(),
-			"HeadRefName": prData.Primary.HeadRefName,
-			"BaseRefName": prData.Primary.BaseRefName,
+			"RepoName":       prData.GetRepoNameWithOwner(),
+			"PrNumber":       prData.GetNumber(),
+			"HeadRefName":    prData.Primary.HeadRefName,
+			"BaseRefName":    prData.Primary.BaseRefName,
+			"ProjectPath":    templateVars["ProjectPath"],
+			"ProviderID":     templateVars["ProviderID"],
+			"ProviderHost":   templateVars["ProviderHost"],
+			"ProviderName":   templateVars["ProviderName"],
+			"WorkItemKind":   templateVars["WorkItemKind"],
+			"WorkItemURL":    templateVars["WorkItemURL"],
+			"WorkItemNumber": templateVars["WorkItemNumber"],
 		})
 }
 
 func (m *Model) runCustomIssueCommand(commandTemplate string, issueData *domain.Issue) tea.Cmd {
+	templateVars := m.workItemTemplateVars(issueData)
 	return m.runCustomCommand(commandTemplate,
 		&map[string]any{
-			"RepoName":    issueData.GetRepoNameWithOwner(),
-			"IssueNumber": issueData.GetNumber(),
+			"RepoName":       issueData.GetRepoNameWithOwner(),
+			"IssueNumber":    issueData.GetNumber(),
+			"ProjectPath":    templateVars["ProjectPath"],
+			"ProviderID":     templateVars["ProviderID"],
+			"ProviderHost":   templateVars["ProviderHost"],
+			"ProviderName":   templateVars["ProviderName"],
+			"WorkItemKind":   templateVars["WorkItemKind"],
+			"WorkItemURL":    templateVars["WorkItemURL"],
+			"WorkItemNumber": templateVars["WorkItemNumber"],
 		},
 	)
 }
@@ -187,12 +207,20 @@ func (m *Model) runCustomBranchCommand(commandTemplate string, branchData *domai
 		"RepoPath": m.ctx.RepoPath,
 	}
 	if branchData != nil {
+		templateVars := m.workItemTemplateVars(branchData)
 		maps.Copy(input,
 			map[string]any{
-				"RepoName":    branchData.GetRepoNameWithOwner(),
-				"PrNumber":    branchData.GetNumber(),
-				"HeadRefName": branchData.Primary.HeadRefName,
-				"BaseRefName": branchData.Primary.BaseRefName,
+				"RepoName":       branchData.GetRepoNameWithOwner(),
+				"PrNumber":       branchData.GetNumber(),
+				"HeadRefName":    branchData.Primary.HeadRefName,
+				"BaseRefName":    branchData.Primary.BaseRefName,
+				"ProjectPath":    templateVars["ProjectPath"],
+				"ProviderID":     templateVars["ProviderID"],
+				"ProviderHost":   templateVars["ProviderHost"],
+				"ProviderName":   templateVars["ProviderName"],
+				"WorkItemKind":   templateVars["WorkItemKind"],
+				"WorkItemURL":    templateVars["WorkItemURL"],
+				"WorkItemNumber": templateVars["WorkItemNumber"],
 			})
 	}
 	return m.runCustomCommand(commandTemplate, &input)
@@ -201,6 +229,32 @@ func (m *Model) runCustomBranchCommand(commandTemplate string, branchData *domai
 func (m *Model) runCustomUniversalCommand(commandTemplate string) tea.Cmd {
 	input := map[string]any{"RepoPath": m.ctx.RepoPath}
 	return m.runCustomCommand(commandTemplate, &input)
+}
+
+func (m *Model) workItemTemplateVars(item domain.WorkItem) map[string]any {
+	if item == nil {
+		return map[string]any{}
+	}
+	key := item.Key()
+	projectPath := key.RepoPath
+	if projectPath == "" {
+		projectPath = item.GetRepoNameWithOwner()
+	}
+	output := map[string]any{
+		"ProviderID":     key.ProviderID,
+		"ProjectPath":    projectPath,
+		"WorkItemKind":   string(key.Type),
+		"WorkItemNumber": item.GetNumber(),
+		"WorkItemURL":    item.GetUrl(),
+	}
+	if provider, ok := m.ctx.ProviderByID(key.ProviderID); ok {
+		output["ProviderHost"] = provider.Host
+		output["ProviderName"] = provider.DisplayName
+	}
+	if output["RepoName"] == nil && projectPath != "" {
+		output["RepoName"] = projectPath
+	}
+	return output
 }
 
 type execProcessFinishedMsg struct{}
