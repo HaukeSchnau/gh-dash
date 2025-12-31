@@ -128,6 +128,57 @@ func FetchGitLabMergeRequests(
 	}, nil
 }
 
+func FetchGitLabMergeRequestByBranch(
+	provider providers.Instance,
+	projectPath string,
+	branch string,
+) (PullRequestData, error) {
+	if projectPath == "" {
+		return PullRequestData{}, fmt.Errorf("missing project path")
+	}
+	params := map[string]string{
+		"scope":         "all",
+		"source_branch": branch,
+	}
+	endpoint := fmt.Sprintf("/projects/%s/merge_requests", url.PathEscape(projectPath))
+	body, _, err := gitlabGet(provider, endpoint, params)
+	if err != nil {
+		return PullRequestData{}, err
+	}
+	var items []gitlabMergeRequest
+	if err := json.Unmarshal(body, &items); err != nil {
+		return PullRequestData{}, err
+	}
+	if len(items) != 1 {
+		return PullRequestData{}, fmt.Errorf("expected 1 merge request, got %d", len(items))
+	}
+	item := items[0]
+	project := projectPath
+	if project == "" {
+		project = gitlabProjectPath(item.References.Full, item.WebURL)
+	}
+	repoName := path.Base(project)
+	createdAt, _ := time.Parse(time.RFC3339, item.CreatedAt)
+	updatedAt, _ := time.Parse(time.RFC3339, item.UpdatedAt)
+	return PullRequestData{
+		Number:         item.IID,
+		Title:          item.Title,
+		State:          mapGitLabMRState(item.State),
+		Url:            item.WebURL,
+		UpdatedAt:      updatedAt,
+		CreatedAt:      createdAt,
+		HeadRefName:    item.SourceBranch,
+		BaseRefName:    item.TargetBranch,
+		IsDraft:        item.Draft || item.WorkInProgress,
+		Repository:     Repository{Name: repoName, NameWithOwner: project},
+		HeadRepository: struct{ Name string }{Name: repoName},
+		Comments:       Comments{TotalCount: item.UserNotesCount},
+		ReviewThreads:  ReviewThreads{TotalCount: 0},
+		Reviews:        Reviews{TotalCount: 0},
+		Author:         struct{ Login string }{Login: item.Author.Username},
+	}, nil
+}
+
 func FetchGitLabIssues(
 	provider providers.Instance,
 	filter string,

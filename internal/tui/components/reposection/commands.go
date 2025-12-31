@@ -11,6 +11,7 @@ import (
 
 	"github.com/dlvhdr/gh-dash/v4/internal/data"
 	"github.com/dlvhdr/gh-dash/v4/internal/git"
+	"github.com/dlvhdr/gh-dash/v4/internal/providers"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/tasks"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/constants"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/context"
@@ -264,7 +265,14 @@ func (m *Model) fetchPRsCmd() tea.Cmd {
 				Err:         fmt.Errorf("unsupported remote URL: %w", parseErr),
 			}
 		}
-		res, err := data.FetchPullRequests(fmt.Sprintf("author:@me repo:%s", ref.ProjectPath), *limit, nil)
+		provider, ok := resolveProvider(m.Ctx, ref)
+		var res data.PullRequestsResponse
+		if ok && provider.Kind == providers.KindGitLab {
+			filter := fmt.Sprintf(`author = "@me" and project = "%s" and state = "open"`, ref.ProjectPath)
+			res, err = data.FetchGitLabMergeRequests(provider, filter, *limit)
+		} else {
+			res, err = data.FetchPullRequests(fmt.Sprintf("author:@me repo:%s", ref.ProjectPath), *limit, nil)
+		}
 		if err != nil {
 			return constants.TaskFinishedMsg{
 				SectionId:   0,
@@ -311,6 +319,28 @@ func (m *Model) fetchPRCmd(branch string) []tea.Cmd {
 				Err:         fmt.Errorf("unsupported remote URL: %w", parseErr),
 			}
 		}
+		provider, ok := resolveProvider(m.Ctx, ref)
+		if ok && provider.Kind == providers.KindGitLab {
+			pr, err := data.FetchGitLabMergeRequestByBranch(provider, ref.ProjectPath, branch)
+			if err != nil {
+				return constants.TaskFinishedMsg{
+					SectionId:   0,
+					SectionType: SectionType,
+					TaskId:      prsTaskId,
+					Err:         err,
+				}
+			}
+			return constants.TaskFinishedMsg{
+				SectionId:   0,
+				SectionType: SectionType,
+				TaskId:      prsTaskId,
+				Msg: tasks.UpdateBranchMsg{
+					Name:  branch,
+					NewPr: &pr,
+				},
+			}
+		}
+
 		res, err := data.FetchPullRequests(fmt.Sprintf("author:@me repo:%s head:%s", ref.ProjectPath, branch), 1, nil)
 		log.Debug("Fetching PRs", "res", res)
 		if err != nil {
@@ -341,6 +371,18 @@ func (m *Model) fetchPRCmd(branch string) []tea.Cmd {
 			},
 		}
 	}}
+}
+
+func resolveProvider(ctx *context.ProgramContext, ref git.RemoteRef) (providers.Instance, bool) {
+	if ctx == nil {
+		return providers.Instance{}, false
+	}
+	for _, provider := range ctx.Providers {
+		if provider.Host == ref.Host {
+			return provider, true
+		}
+	}
+	return providers.Instance{}, false
 }
 
 type RefreshBranchesMsg struct {
