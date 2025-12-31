@@ -17,19 +17,19 @@ These examples show a few ways you might configure your dashboard.
 ```yaml
 prSections:
   - title: "My Pull Requests"
-    filters: "is:open author:@me"
+    filters: "state = \"open\" and author = \"me\""
   - title: "Needs My Review"
-    filters: "is:open review-requested:@me"
+    filters: "state = \"open\" and review_requested = \"me\""
   - title: "Involved"
-    filters: "is:open involves:@me -author:@me"
+    filters: "state = \"open\" and involves = \"me\" and author != \"me\""
 
 issuesSections:
   - title: "My Issues"
-    filters: "is:open author:@me"
+    filters: "state = \"open\" and author = \"me\""
   - title: "Assigned"
-    filters: "is:open assignee:@me"
+    filters: "state = \"open\" and assignee = \"me\""
   - title: "Involved"
-    filters: "is:open involves:@me -author:@me"
+    filters: "state = \"open\" and involves = \"me\" and author != \"me\""
 
 pager:
   diff: less

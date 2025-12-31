@@ -26,27 +26,27 @@ the issues view.
 
 ## Issues Filters (`filters`)
 
-This setting defines the [GitHub search filters][01] for the Issues in the section's table.
+This setting defines the provider-agnostic filter DSL for the issues in the section's table.
 
-Don't specify `is:issue` for this setting. The dashboard always adds that filter for Issues
-sections.
+Don't specify `type = "issue"` for this setting. The dashboard always adds that filter for
+issue sections.
 
-You can define any combination of search filters. To make it easier to read and maintain
-your filters, we recommend using the `>-` syntax after the `filter` key and writing one
+You can define any combination of filters. To make it easier to read and maintain your
+filters, we recommend using the `>-` syntax after the `filters` key and writing one
 filter per line.
 
 For example:
 
 ```yaml
 - # Involved
-  filter: >-
-    is:open
-    involves:@me
-    -author:@me
-    updated>={{ nowModify "-2w" }}
+  filters: >-
+    state = "open"
+    involves = "me"
+    author != "me"
+    updated in last(2w)
 ```
 
-For more information about writing filters for searching GitHub, see [Searching].
+For more information about writing filters, see [Searching].
 
 [Searching]: /configuration/searching
 
@@ -80,7 +80,6 @@ This setting defines how many Issues the dashboard should fetch for the section 
 
 This setting overrides the [`defaults.issuesLimit`] setting.
 
-[01]: https://docs.github.com/en/search-github/searching-on-github/searching-issues-and-pull-requests
 [fetch interval]: /configuration/defaults/#refetch-interval-in-minutes-refetchintervalminutes
 [refresh current section]: /getting-started/keybindings/global/#r---refresh-current-section
 [refresh all sections]: /getting-started/keybindings/global/#r---refresh-all-sections

@@ -3,55 +3,58 @@ title: Searching
 linkTitle: >-
   ![icon:search](lucide)&nbsp;Searching
 summary: >-
-  How to search and filter issues and prs
+  How to search and filter issues and prs with the DSL
 weight: 3
 ---
 
 # Searching
 
 Searching for prs and issues is done by defining sections and their filters.
-Search filters are defined using [GitHub search filters][01].
+Search filters are defined using the provider-agnostic DSL.
 
-For example, this section, shows open PRs authored by anyone but me, which were updated in the last 2 weeks.
+For example, this section shows open PRs authored by anyone but me, which were
+updated in the last 2 weeks.
 
 ```yaml
 prsSections:
   - title: Review
-    filter: >-
-      is:open
-      -author:@me
-      updated>={{ nowModify "-2w" }}
+    filters: >-
+      state = "open"
+      author != "me"
+      updated in last(2w)
 ```
 
-Note: don't specify `is:pr` for this setting. The dashboard always adds that filter for PR
-sections.
+Note: don't specify `type = "pr"` for this setting. The dashboard always adds that
+filter for PR sections.
 
-You can define any combination of search filters. To make it easier to read and maintain
-your filters, we recommend using the `>-` syntax after the `filter` key and writing one
-filter per line.
+You can define any combination of filters. To make it easier to read and maintain
+your filters, we recommend using the `>-` syntax after the `filters` key and writing
+one filter per line.
 
-For more information about writing filters for searching GitHub, see [Searching issues and pull requests][02].
+For a migration guide and examples, see [Migrating Filters to the DSL].
 
-## Search Templates
+## DSL Essentials
 
-In addition to GitHub's filters, gh-dash adds templating functions.
+- Strings must be quoted: `author = "me"`.
+- Lists are bracketed: `label in ["bug", "urgent"]`.
+- Boolean operators: `and`, `or`, `not` (GitLab supports only `and`).
+- Dates and durations:
+  - `updated >= 2025-12-01`
+  - `updated in last(7d)`
+  - `updated >= -14d`
 
-### `nowModify`
+## Provider Scoping
 
-The `nowModify` function helps you calculate relative dates in the ISO-8601 format (which is what GitHub expects).
+You can scope a section to specific providers with the `provider` predicate:
 
-Given the date today is 2025-02-02, a search filter of `updated>={{ nowModify "-1mo" }}` will output `updated>=2025-01-02`.
+```yaml
+filters: provider in ["github", "gitlab:gitlab.mycorp.com"] and state = "open"
+```
 
-A duration string is a possibly signed sequence of decimal numbers, each with optional fraction and a unit suffix, such as `1w`, `-8h` or `1mo2w`.
+## Provider Limitations
 
-The available units are:
-
-- [Go's builtin durations](https://pkg.go.dev/time#ParseDuration) - `ns`, `us` (or `µs`), `ms`, `s`, `m`, `h`
-- Additionally:
-  - `d`/`D` for days
-  - `w`/`W` for weeks
-  - `M`/`mo` for months
-  - `y`/`Y` for years
+If a predicate or operator is unsupported by a provider instance, that provider
+will display a scoped error while other providers continue to load.
 
 ## Smart Filtering
 
@@ -87,5 +90,4 @@ To toggle Smart Filtering on or off for the current section you’re currently v
 `t` key — or else use whatever custom keybinding you have set for the `togglesearch` builtin in the
 `keybindings` section of your [configuration](/configuration).
 
-[01]: https://docs.github.com/en/search-github/searching-on-github/searching-issues-and-pull-requests
-[02]: https://docs.github.com/en/search-github/getting-started-with-searching-on-github/understanding-the-search-syntax
+[Migrating Filters to the DSL]: /configuration/migrating-filters

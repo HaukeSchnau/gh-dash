@@ -17,7 +17,7 @@ export function GET() {
         filters: {
           title: "Issue Filters",
           description:
-            "Defines the GitHub search filters for the issues in the section's table.",
+            "Defines the provider-agnostic filter DSL for the issues in the section's table.",
           type: "string",
         },
         layout: { $ref: "./layout/issue.json", schematize: { weight: 3 } },

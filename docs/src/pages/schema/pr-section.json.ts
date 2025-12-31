@@ -18,7 +18,7 @@ export function GET() {
         filters: {
           title: "PR Filters",
           description:
-            "Defines the GitHub search filters for the PRs in the section's table.",
+            "Defines the provider-agnostic filter DSL for the PRs in the section's table.",
           type: "string",
         },
         layout: {

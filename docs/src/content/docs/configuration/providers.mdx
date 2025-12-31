@@ -1,0 +1,48 @@
+---
+title: Providers
+---
+
+# Providers (`providers`)
+
+Use the `providers` block to choose which provider instances appear in the
+dashboard and whether sections are grouped by provider by default.
+
+Provider instance IDs use the format `<provider>:<host>`, for example:
+
+- `github:github.com`
+- `github:github.mycorp.com`
+- `gitlab:gitlab.com`
+- `gitlab:gitlab.mycorp.com`
+
+## Include / Exclude (`include`, `exclude`)
+
+`include` and `exclude` accept patterns:
+
+- Exact instance ID: `gitlab:gitlab.mycorp.com`
+- Provider wildcard: `gitlab:*` or `github:*`
+- Provider alias: `gitlab` or `github` (equivalent to `gitlab:*` or `github:*`)
+
+If `include` is empty or omitted, all discovered providers are eligible. The
+`exclude` list is applied after `include`.
+
+```yaml
+providers:
+  include:
+    - github
+    - gitlab:gitlab.mycorp.com
+  exclude:
+    - github:github.com
+```
+
+## Defaults (`defaults`)
+
+### Group By Provider (`groupByProvider`)
+
+When `true`, the dashboard loads with sections grouped by provider instances.
+You can toggle grouping at runtime with the `toggleGroupByProvider` keybinding.
+
+```yaml
+providers:
+  defaults:
+    groupByProvider: true
+```

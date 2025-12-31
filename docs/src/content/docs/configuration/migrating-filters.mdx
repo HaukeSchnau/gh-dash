@@ -1,0 +1,86 @@
+---
+title: Migrating Filters to the DSL
+---
+
+# Migrating Filters to the DSL
+
+Filters now use the provider-agnostic DSL. Legacy GitHub search qualifiers
+(`is:open`, `repo:org/repo`, `-author:@me`, etc.) are no longer accepted.
+
+This guide helps you translate existing filters to the new syntax.
+
+## Key changes
+
+- Use `filters` (plural) and write valid DSL expressions.
+- String values must be quoted.
+- Use `and`, `or`, and `not` for boolean logic (GitLab only supports `and`).
+- Use `in` / `not in` for list membership.
+- Use `updated` / `created` with dates, durations, or `last(...)`.
+
+## Common translations
+
+```yaml
+# GitHub search: is:open author:@me
+filters: state = "open" and author = "me"
+```
+
+```yaml
+# GitHub search: repo:org/repo
+filters: project = "org/repo"
+```
+
+```yaml
+# GitHub search: -author:@me
+filters: author != "me"
+```
+
+```yaml
+# GitHub search: label:bug label:critical
+filters: label in ["bug", "critical"]
+```
+
+```yaml
+# GitHub search: updated:>=2025-12-01
+filters: updated >= 2025-12-01
+```
+
+```yaml
+# GitHub search: updated:>=2025-12-01 updated:<=2025-12-31
+filters: updated >= 2025-12-01 and updated <= 2025-12-31
+```
+
+```yaml
+# GitHub search: updated:>=2025-12-01 (relative)
+filters: updated in last(7d)
+```
+
+```yaml
+# GitHub search: review-requested:@me
+filters: review_requested = "me"
+```
+
+```yaml
+# GitHub search: draft:true
+filters: draft = true
+```
+
+```yaml
+# GitHub search: words in the title/body
+filters: text = "dependency upgrade"
+```
+
+## Provider scoping
+
+You can scope a section to specific providers:
+
+```yaml
+filters: provider in ["github", "gitlab:gitlab.mycorp.com"] and state = "open"
+```
+
+## Notes
+
+- `me` is normalized to `@me` automatically, so `author = "me"` and
+  `author = "@me"` are equivalent.
+- Provider filters must be combined with `and`, and cannot be negated.
+- If a predicate is unsupported by a provider instance, that provider shows a
+  scoped error while other providers continue to load.

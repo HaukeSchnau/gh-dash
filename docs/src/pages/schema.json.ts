@@ -4,7 +4,7 @@ export function GET() {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: "gh-dash.schema.json",
       title: "Dashboard Configuration",
-      description: "Settings for the GitHub Dashboard.",
+      description: "Settings for the gh-dash dashboard.",
       type: "object",
       properties: {
         prSections: {
@@ -53,6 +53,9 @@ export function GET() {
         },
         defaults: {
           $ref: "./schema/defaults.json",
+        },
+        providers: {
+          $ref: "./schema/providers.json",
         },
         repoPaths: {
           title: "Repo Path Map",

@@ -2,7 +2,7 @@
 $schema: https://json-schema.org/draft/2020-12/schema
 $id: gh-dash.schema.yaml
 title: Dashboard Configuration
-description: Settings for the GitHub Dashboard.
+description: Settings for the gh-dash dashboard.
 type: object
 properties:
   prSections:
@@ -13,12 +13,12 @@ properties:
       details: |
         The `prSections` setting defines one or more sections to display in the dashboard's PRs
         view as tabs. Each section needs a title, which is displayed as the tab name for the
-        section, and a [GitHub search filter]. The dashboard queries GitHub with the search filter
-        to populate the list of PRs to display for that section.
+        section, and a [filter expression]. The dashboard evaluates the filter DSL per provider
+        instance to populate the list of PRs to display for that section.
 
         For more information about defining a PR section, see [sref:PR Section Options].
 
-        [GitHub search filter]: https://docs.github.com/en/search-github/searching-on-github/searching-issues-and-pull-requests
+        [filter expression]: /configuration/searching
         [sref:PR Section Options]: pr-section
       default:
         details: |
@@ -40,17 +40,17 @@ properties:
     default:
       - title: My Pull Requests
         filters: >-
-          is:open
-          author:@me
+          state = "open"
+          author = "me"
       - title: Needs My Review
         filters: >-
-          is:open
-          review-requested:@me
+          state = "open"
+          review_requested = "me"
       - title: Involved
         filters: >-
-          is:open
-          involves:@me
-          -author:@me
+          state = "open"
+          involves = "me"
+          author != "me"
   issuesSections:
     title: Issue Sections
     description: Define sections for the dashboard's Issues view.
@@ -59,12 +59,12 @@ properties:
       details: |
         The `issueSections` setting defines one or more sections to display in the dashboard's
         Issues view as tabs. Each section needs a title, which is displayed as the tab name for the
-        section, and a [GitHub search filter]. The dashboard queries GitHub with the search filter
-        to populate the list of issues to display for that section.
+        section, and a [filter expression]. The dashboard evaluates the filter DSL per provider
+        instance to populate the list of issues to display for that section.
 
         For more information about defining an issue section, see [sref:Issue Section Options].
 
-        [GitHub search filter]: https://docs.github.com/en/search-github/searching-on-github/searching-issues-and-pull-requests
+        [filter expression]: /configuration/searching
         [sref:Issue Section Options]: issue-section
       default:
         details: |
@@ -85,26 +85,30 @@ properties:
     default:
       - title: My Issues
         filters: >-
-          is:open
-          author:@me
+          state = "open"
+          author = "me"
       - title: Assigned
         filters: >-
-          is:open
-          assignee:@me
+          state = "open"
+          assignee = "me"
       - title: Involved
         filters: >-
-          is:open
-          involves:@me
-          -author:@me
+          state = "open"
+          involves = "me"
+          author != "me"
   defaults:
     $ref: ./defaults.yaml
     schematize:
       weight: 3
+  providers:
+    $ref: ./providers.yaml
+    schematize:
+      weight: 4
   repoPaths:
     title: Repo Path Map
     description: Key-value pairs that match repositories to local file paths.
     schematize:
-      weight: 4
+      weight: 5
       details: |
         You can use the `repoPaths` setting to map repository names (as keys) to local paths
         (as values). This map coonfigures where to locate repositories when checking out PRs.

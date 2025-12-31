@@ -1,0 +1,54 @@
+# yaml-language-server: $schema=https://json-schema.org/draft/2020-12/schema
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: providers.schema.yaml
+title: Providers
+description: Configure which provider instances are enabled in the UI.
+type: object
+schematize:
+  details: |
+    Use the `providers` block to choose which provider instances appear in the
+    dashboard and whether sections are grouped by provider by default.
+
+    Provider instance IDs use the format `<provider>:<host>`, for example:
+
+    - `github:github.com`
+    - `github:github.mycorp.com`
+    - `gitlab:gitlab.com`
+    - `gitlab:gitlab.mycorp.com`
+properties:
+  include:
+    title: Include Providers
+    description: List of provider patterns to include.
+    type: array
+    items:
+      type: string
+    schematize:
+      weight: 1
+      details: |
+        `include` accepts patterns:
+
+        - Exact instance ID: `gitlab:gitlab.mycorp.com`
+        - Provider wildcard: `gitlab:*` or `github:*`
+        - Provider alias: `gitlab` or `github`
+  exclude:
+    title: Exclude Providers
+    description: List of provider patterns to exclude.
+    type: array
+    items:
+      type: string
+    schematize:
+      weight: 2
+      details: |
+        `exclude` accepts the same patterns as `include`. Exclusions are applied
+        after inclusions.
+  defaults:
+    title: Provider Defaults
+    description: Default UI behavior for provider-aware views.
+    type: object
+    schematize:
+      weight: 3
+    properties:
+      groupByProvider:
+        title: Group By Provider
+        description: When true, sections are grouped by provider by default.
+        type: boolean
