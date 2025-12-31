@@ -22,6 +22,21 @@ func ValidateFilter(filter string) error {
 		return nil
 	}
 
+	if err := detectLegacyQualifiers(filter); err != nil {
+		return err
+	}
+
+	if _, err := ParseFilter(filter); err != nil {
+		return ValidationError{
+			Reason: err.Error(),
+			Hint:   "use quoted strings and the documented DSL operators",
+		}
+	}
+
+	return nil
+}
+
+func detectLegacyQualifiers(filter string) error {
 	inQuote := false
 	escaped := false
 	for i, r := range filter {
@@ -47,14 +62,6 @@ func ValidateFilter(filter string) error {
 			escaped = false
 		}
 	}
-
-	if inQuote {
-		return ValidationError{
-			Reason: "filters contain an unterminated string",
-			Hint:   "close the quote or escape it with \\\"",
-		}
-	}
-
 	return nil
 }
 
