@@ -3,7 +3,6 @@ package prssection
 import (
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -689,7 +688,7 @@ func providerAllowed(provider providers.Instance, filter dsl.ProviderFilter) boo
 	if len(filter.Include) > 0 {
 		ok := false
 		for _, item := range filter.Include {
-			if providerMatches(provider, item) {
+			if providers.MatchesPattern(provider, item) {
 				ok = true
 				break
 			}
@@ -699,25 +698,11 @@ func providerAllowed(provider providers.Instance, filter dsl.ProviderFilter) boo
 		}
 	}
 	for _, item := range filter.Exclude {
-		if providerMatches(provider, item) {
+		if providers.MatchesPattern(provider, item) {
 			return false
 		}
 	}
 	return true
-}
-
-func providerMatches(provider providers.Instance, pattern string) bool {
-	pattern = strings.TrimSpace(pattern)
-	if pattern == "" {
-		return false
-	}
-	if pattern == string(provider.Kind) || pattern == string(provider.Kind)+":*" {
-		return true
-	}
-	if strings.HasSuffix(pattern, ":*") {
-		return strings.HasPrefix(provider.ID, strings.TrimSuffix(pattern, "*"))
-	}
-	return provider.ID == pattern
 }
 
 func FetchAllSections(
@@ -725,8 +710,8 @@ func FetchAllSections(
 	prs []section.Section,
 ) (sections []section.Section, fetchAllCmd tea.Cmd) {
 	configs := ctx.Config.PRSections
-	providers := ctx.ProvidersByKind(providers.KindGitHub)
-	shouldGroup := ctx.GroupByProvider && len(providers) > 0
+	providerInstances := ctx.Providers
+	shouldGroup := ctx.GroupByProvider && len(providerInstances) > 0
 	sections = make([]section.Section, 0, len(configs))
 	fetchPRsCmds := make([]tea.Cmd, 0, len(configs))
 
@@ -754,7 +739,7 @@ func FetchAllSections(
 	}
 
 	if shouldGroup {
-		for _, provider := range providers {
+		for _, provider := range providerInstances {
 			for _, sectionConfig := range configs {
 				sectionCopy := sectionConfig
 				sectionCopy.Title = fmt.Sprintf("%s · %s", sectionConfig.Title, provider.DisplayName)

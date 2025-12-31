@@ -161,6 +161,12 @@ func (m *Model) initScreen() tea.Msg {
 		log.Warn("failed to discover GitLab hosts", "err", err)
 	}
 
+	providersList = providers.FilterInstances(
+		providersList,
+		cfg.Providers.Include,
+		cfg.Providers.Exclude,
+	)
+
 	return initMsg{Config: cfg, RepoUrl: url, Providers: providersList}
 }
 
@@ -554,6 +560,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ctx.Config = &msg.Config
 		m.ctx.RepoUrl = msg.RepoUrl
 		m.ctx.Providers = msg.Providers
+		m.ctx.GroupByProvider = msg.Config.Providers.Defaults.GroupByProvider
 		m.ctx.Theme = theme.ParseTheme(m.ctx.Config)
 		m.ctx.Styles = context.InitStyles(m.ctx.Theme)
 		m.ctx.View = m.ctx.Config.Defaults.View

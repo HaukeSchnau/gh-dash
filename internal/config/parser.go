@@ -180,6 +180,16 @@ type Defaults struct {
 	DateFormat             string        `yaml:"dateFormat,omitempty"`
 }
 
+type ProviderDefaults struct {
+	GroupByProvider bool `yaml:"groupByProvider,omitempty"`
+}
+
+type ProvidersConfig struct {
+	Include  []string         `yaml:"include,omitempty"`
+	Exclude  []string         `yaml:"exclude,omitempty"`
+	Defaults ProviderDefaults `yaml:"defaults,omitempty"`
+}
+
 type RepoConfig struct {
 	BranchesRefetchIntervalSeconds int `yaml:"branchesRefetchIntervalSeconds,omitempty"`
 	PrsRefetchIntervalSeconds      int `yaml:"prsRefetchIntervalSeconds,omitempty"`
@@ -303,6 +313,7 @@ type Config struct {
 	IssuesSections         []IssuesSectionConfig `yaml:"issuesSections"`
 	Repo                   RepoConfig            `yaml:"repo,omitempty"`
 	Defaults               Defaults              `yaml:"defaults"`
+	Providers              ProvidersConfig       `yaml:"providers,omitempty"`
 	Keybindings            Keybindings           `yaml:"keybindings"`
 	RepoPaths              map[string]string     `yaml:"repoPaths"`
 	Theme                  *ThemeConfig          `yaml:"theme,omitempty" validate:"omitempty"`

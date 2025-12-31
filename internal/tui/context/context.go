@@ -115,8 +115,8 @@ func (ctx *ProgramContext) GetPrSectionConfigs() []config.SectionConfig {
 		return out
 	}
 
-	providers := ctx.ProvidersByKind(providers.KindGitHub)
-	if len(providers) == 0 {
+	providerInstances := ctx.Providers
+	if len(providerInstances) == 0 {
 		out := make([]config.SectionConfig, 0, len(sections))
 		for _, cfg := range sections {
 			out = append(out, cfg.ToSectionConfig())
@@ -124,8 +124,8 @@ func (ctx *ProgramContext) GetPrSectionConfigs() []config.SectionConfig {
 		return out
 	}
 
-	out := make([]config.SectionConfig, 0, len(sections)*len(providers))
-	for _, provider := range providers {
+	out := make([]config.SectionConfig, 0, len(sections)*len(providerInstances))
+	for _, provider := range providerInstances {
 		for _, cfg := range sections {
 			sectionCfg := cfg.ToSectionConfig()
 			sectionCfg.Title = fmt.Sprintf("%s · %s", sectionCfg.Title, provider.DisplayName)
@@ -145,8 +145,8 @@ func (ctx *ProgramContext) GetIssueSectionConfigs() []config.SectionConfig {
 		return out
 	}
 
-	providers := ctx.ProvidersByKind(providers.KindGitHub)
-	if len(providers) == 0 {
+	providerInstances := ctx.Providers
+	if len(providerInstances) == 0 {
 		out := make([]config.SectionConfig, 0, len(sections))
 		for _, cfg := range sections {
 			out = append(out, cfg.ToSectionConfig())
@@ -154,8 +154,8 @@ func (ctx *ProgramContext) GetIssueSectionConfigs() []config.SectionConfig {
 		return out
 	}
 
-	out := make([]config.SectionConfig, 0, len(sections)*len(providers))
-	for _, provider := range providers {
+	out := make([]config.SectionConfig, 0, len(sections)*len(providerInstances))
+	for _, provider := range providerInstances {
 		for _, cfg := range sections {
 			sectionCfg := cfg.ToSectionConfig()
 			sectionCfg.Title = fmt.Sprintf("%s · %s", sectionCfg.Title, provider.DisplayName)
