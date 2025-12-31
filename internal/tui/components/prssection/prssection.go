@@ -3,6 +3,8 @@ package prssection
 import (
 	"fmt"
 	"slices"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -28,7 +30,8 @@ const SectionType = "pr"
 
 type Model struct {
 	section.BaseModel
-	Prs []domain.PullRequest
+	Prs            []domain.PullRequest
+	ProviderErrors map[string]string
 }
 
 func NewModel(
@@ -193,6 +196,7 @@ func (m *Model) Update(msg tea.Msg) (section.Section, tea.Cmd) {
 			}
 			m.TotalCount = msg.TotalCount
 			m.PageInfo = &msg.PageInfo
+			m.ProviderErrors = msg.ProviderErrors
 			m.SetIsLoading(false)
 			m.Table.SetRows(m.BuildRows())
 			m.Table.UpdateLastUpdated(time.Now())
@@ -419,10 +423,11 @@ func (m *Model) NumRows() int {
 }
 
 type SectionPullRequestsFetchedMsg struct {
-	Prs        []domain.PullRequest
-	TotalCount int
-	PageInfo   data.PageInfo
-	TaskId     string
+	Prs            []domain.PullRequest
+	TotalCount     int
+	PageInfo       data.PageInfo
+	TaskId         string
+	ProviderErrors map[string]string
 }
 
 func (m *Model) GetCurrRow() domain.WorkItem {
@@ -526,10 +531,11 @@ func (m *Model) FetchNextPageSectionRows() []tea.Cmd {
 					SectionType: m.Type,
 					TaskId:      taskId,
 					Msg: SectionPullRequestsFetchedMsg{
-						Prs:        nil,
-						TotalCount: 0,
-						PageInfo:   data.PageInfo{HasNextPage: false},
-						TaskId:     taskId,
+						Prs:            nil,
+						TotalCount:     0,
+						PageInfo:       data.PageInfo{HasNextPage: false},
+						TaskId:         taskId,
+						ProviderErrors: nil,
 					},
 				}
 			}
@@ -552,37 +558,31 @@ func (m *Model) FetchNextPageSectionRows() []tea.Cmd {
 				SectionType: m.Type,
 				TaskId:      taskId,
 				Msg: SectionPullRequestsFetchedMsg{
-					Prs:        prs,
-					TotalCount: res.TotalCount,
-					PageInfo:   res.PageInfo,
-					TaskId:     taskId,
+					Prs:            prs,
+					TotalCount:     res.TotalCount,
+					PageInfo:       res.PageInfo,
+					TaskId:         taskId,
+					ProviderErrors: nil,
 				},
 			}
 		}
 
 		totalCount := 0
 		prs := make([]domain.PullRequest, 0, len(providers)*(*limit))
+		providerErrors := make(map[string]string)
 		for _, provider := range providers {
 			query, skip, err := queryForProvider(provider, filters)
 			if err != nil {
-				return constants.TaskFinishedMsg{
-					SectionId:   m.Id,
-					SectionType: m.Type,
-					TaskId:      taskId,
-					Err:         err,
-				}
+				providerErrors[provider.ID] = err.Error()
+				continue
 			}
 			if skip {
 				continue
 			}
 			res, err := fetchPullRequestsForProvider(provider, query, *limit, nil)
 			if err != nil {
-				return constants.TaskFinishedMsg{
-					SectionId:   m.Id,
-					SectionType: m.Type,
-					TaskId:      taskId,
-					Err:         err,
-				}
+				providerErrors[provider.ID] = err.Error()
+				continue
 			}
 			totalCount += res.TotalCount
 			for i := range res.Prs {
@@ -594,10 +594,11 @@ func (m *Model) FetchNextPageSectionRows() []tea.Cmd {
 			SectionType: m.Type,
 			TaskId:      taskId,
 			Msg: SectionPullRequestsFetchedMsg{
-				Prs:        prs,
-				TotalCount: totalCount,
-				PageInfo:   data.PageInfo{HasNextPage: false},
-				TaskId:     taskId,
+				Prs:            prs,
+				TotalCount:     totalCount,
+				PageInfo:       data.PageInfo{HasNextPage: false},
+				TaskId:         taskId,
+				ProviderErrors: providerErrors,
 			},
 		}
 	}
@@ -614,6 +615,7 @@ func (m *Model) FetchNextPageSectionRows() []tea.Cmd {
 
 func (m *Model) ResetRows() {
 	m.Prs = nil
+	m.ProviderErrors = nil
 	m.BaseModel.ResetRows()
 }
 
@@ -831,6 +833,29 @@ func (m Model) GetPagerContent() string {
 			len(m.Table.Rows),
 		)
 	}
+	if errSummary := m.providerErrorsSummary(); errSummary != "" {
+		if pagerContent != "" {
+			pagerContent = fmt.Sprintf("%s • %s", pagerContent, errSummary)
+		} else {
+			pagerContent = errSummary
+		}
+	}
 	pager := m.Ctx.Styles.ListViewPort.PagerStyle.Render(pagerContent)
 	return pager
+}
+
+func (m Model) providerErrorsSummary() string {
+	if len(m.ProviderErrors) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(m.ProviderErrors))
+	for providerID, errMsg := range m.ProviderErrors {
+		label := providerID
+		if provider, ok := m.Ctx.ProviderByID(providerID); ok {
+			label = provider.DisplayName
+		}
+		parts = append(parts, fmt.Sprintf("%s: %s", label, errMsg))
+	}
+	sort.Strings(parts)
+	return fmt.Sprintf("%s %s", constants.FailureIcon, strings.Join(parts, " | "))
 }
