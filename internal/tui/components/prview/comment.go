@@ -2,7 +2,6 @@ package prview
 
 import (
 	"fmt"
-	"os/exec"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -12,6 +11,7 @@ import (
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/tasks"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/constants"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/context"
+	"github.com/dlvhdr/gh-dash/v4/internal/tui/ghcli"
 )
 
 func (m *Model) comment(body string) tea.Cmd {
@@ -27,16 +27,7 @@ func (m *Model) comment(body string) tea.Cmd {
 	}
 	startCmd := m.ctx.StartTask(task)
 	return tea.Batch(startCmd, func() tea.Msg {
-		c := exec.Command(
-			"gh",
-			"pr",
-			"comment",
-			fmt.Sprint(prNumber),
-			"-R",
-			pr.GetRepoNameWithOwner(),
-			"-b",
-			body,
-		)
+		c := ghcli.CommandForItem(m.ctx, m.pr.Data, "pr", "comment", fmt.Sprint(prNumber), "-R", pr.GetRepoNameWithOwner(), "-b", body)
 
 		err := c.Run()
 		return constants.TaskFinishedMsg{

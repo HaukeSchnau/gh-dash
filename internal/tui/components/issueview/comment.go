@@ -2,7 +2,6 @@ package issueview
 
 import (
 	"fmt"
-	"os/exec"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -11,6 +10,7 @@ import (
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/issuessection"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/constants"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/context"
+	"github.com/dlvhdr/gh-dash/v4/internal/tui/ghcli"
 )
 
 func (m *Model) comment(body string) tea.Cmd {
@@ -26,16 +26,7 @@ func (m *Model) comment(body string) tea.Cmd {
 	}
 	startCmd := m.ctx.StartTask(task)
 	return tea.Batch(startCmd, func() tea.Msg {
-		c := exec.Command(
-			"gh",
-			"issue",
-			"comment",
-			fmt.Sprint(issueNumber),
-			"-R",
-			issue.GetRepoNameWithOwner(),
-			"-b",
-			body,
-		)
+		c := ghcli.CommandForItem(m.ctx, issue, "issue", "comment", fmt.Sprint(issueNumber), "-R", issue.GetRepoNameWithOwner(), "-b", body)
 
 		err := c.Run()
 		return constants.TaskFinishedMsg{

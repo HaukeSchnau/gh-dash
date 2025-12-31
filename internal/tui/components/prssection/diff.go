@@ -2,10 +2,10 @@ package prssection
 
 import (
 	"fmt"
-	"os/exec"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/constants"
+	"github.com/dlvhdr/gh-dash/v4/internal/tui/ghcli"
 )
 
 func (m Model) diff() tea.Cmd {
@@ -14,14 +14,7 @@ func (m Model) diff() tea.Cmd {
 		return nil
 	}
 
-	c := exec.Command(
-		"gh",
-		"pr",
-		"diff",
-		fmt.Sprint(currRowData.GetNumber()),
-		"-R",
-		m.GetCurrRow().GetRepoNameWithOwner(),
-	)
+	c := ghcli.CommandForItem(m.Ctx, currRowData, "pr", "diff", fmt.Sprint(currRowData.GetNumber()), "-R", m.GetCurrRow().GetRepoNameWithOwner())
 	c.Env = m.Ctx.Config.GetFullScreenDiffPagerEnv()
 
 	return tea.ExecProcess(c, func(err error) tea.Msg {

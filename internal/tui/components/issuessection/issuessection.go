@@ -8,13 +8,13 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
-	gh "github.com/cli/go-gh/v2/pkg/api"
 
 	"github.com/dlvhdr/gh-dash/v4/internal/config"
 	"github.com/dlvhdr/gh-dash/v4/internal/data"
 	"github.com/dlvhdr/gh-dash/v4/internal/domain"
 	"github.com/dlvhdr/gh-dash/v4/internal/dsl"
 	"github.com/dlvhdr/gh-dash/v4/internal/providers"
+	ghprovider "github.com/dlvhdr/gh-dash/v4/internal/providers/github"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/issuerow"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/section"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/table"
@@ -509,14 +509,7 @@ func fetchIssuesForProvider(
 	}
 	switch provider.Kind {
 	case providers.KindGitHub:
-		client, err := gh.NewGraphQLClient(gh.ClientOptions{
-			Host:      provider.Host,
-			AuthToken: provider.AuthToken,
-		})
-		if err != nil {
-			return data.IssuesResponse{}, err
-		}
-		return data.FetchIssuesWithClient(client, query, limit, pageInfo)
+		return ghprovider.Provider{Instance: provider}.FetchIssues(query, limit, pageInfo)
 	case providers.KindGitLab:
 		return data.FetchGitLabIssues(provider, query, limit)
 	default:

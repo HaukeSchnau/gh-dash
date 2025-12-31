@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -12,6 +11,7 @@ import (
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/common"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/constants"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/context"
+	"github.com/dlvhdr/gh-dash/v4/internal/tui/ghcli"
 )
 
 func (m *Model) checkout() (tea.Cmd, error) {
@@ -38,12 +38,7 @@ func (m *Model) checkout() (tea.Cmd, error) {
 	}
 	startCmd := m.Ctx.StartTask(task)
 	return tea.Batch(startCmd, func() tea.Msg {
-		c := exec.Command(
-			"gh",
-			"pr",
-			"checkout",
-			fmt.Sprint(m.GetCurrRow().GetNumber()),
-		)
+		c := ghcli.CommandForItem(m.Ctx, pr, "pr", "checkout", fmt.Sprint(pr.GetNumber()))
 		userHomeDir, _ := os.UserHomeDir()
 		if strings.HasPrefix(repoPath, "~") {
 			repoPath = strings.Replace(repoPath, "~", userHomeDir, 1)

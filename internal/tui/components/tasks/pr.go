@@ -12,6 +12,7 @@ import (
 	"github.com/dlvhdr/gh-dash/v4/internal/domain"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/constants"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/context"
+	"github.com/dlvhdr/gh-dash/v4/internal/tui/ghcli"
 	"github.com/dlvhdr/gh-dash/v4/internal/utils"
 )
 
@@ -44,6 +45,7 @@ func buildTaskId(prefix string, prNumber int) string {
 type GitHubTask struct {
 	Id           string
 	Args         []string
+	Command      *exec.Cmd
 	Section      SectionIdentifier
 	StartText    string
 	FinishedText string
@@ -61,8 +63,15 @@ func fireTask(ctx *context.ProgramContext, task GitHubTask) tea.Cmd {
 
 	startCmd := ctx.StartTask(start)
 	return tea.Batch(startCmd, func() tea.Msg {
-		log.Info("Running task", "cmd", "gh "+strings.Join(task.Args, " "))
-		c := exec.Command("gh", task.Args...)
+		cmdArgs := task.Args
+		if task.Command != nil {
+			cmdArgs = task.Command.Args[1:]
+		}
+		log.Info("Running task", "cmd", "gh "+strings.Join(cmdArgs, " "))
+		c := task.Command
+		if c == nil {
+			c = exec.Command("gh", task.Args...)
+		}
 
 		err := c.Run()
 		return constants.TaskFinishedMsg{
@@ -77,15 +86,8 @@ func fireTask(ctx *context.ProgramContext, task GitHubTask) tea.Cmd {
 
 func OpenBranchPR(ctx *context.ProgramContext, section SectionIdentifier, branch string) tea.Cmd {
 	return fireTask(ctx, GitHubTask{
-		Id: fmt.Sprintf("branch_open_%s", branch),
-		Args: []string{
-			"pr",
-			"view",
-			"--web",
-			branch,
-			"-R",
-			ctx.RepoUrl,
-		},
+		Id:           fmt.Sprintf("branch_open_%s", branch),
+		Command:      ghcli.CommandForRepo(ctx, ctx.RepoUrl, "pr", "view", "--web", branch, "-R", ctx.RepoUrl),
 		Section:      section,
 		StartText:    fmt.Sprintf("Opening PR for branch %s", branch),
 		FinishedText: fmt.Sprintf("PR for branch %s has been opened", branch),
@@ -98,14 +100,8 @@ func OpenBranchPR(ctx *context.ProgramContext, section SectionIdentifier, branch
 func ReopenPR(ctx *context.ProgramContext, section SectionIdentifier, pr domain.WorkItem) tea.Cmd {
 	prNumber := pr.GetNumber()
 	return fireTask(ctx, GitHubTask{
-		Id: buildTaskId("pr_reopen", prNumber),
-		Args: []string{
-			"pr",
-			"reopen",
-			fmt.Sprint(prNumber),
-			"-R",
-			pr.GetRepoNameWithOwner(),
-		},
+		Id:           buildTaskId("pr_reopen", prNumber),
+		Command:      ghcli.CommandForItem(ctx, pr, "pr", "reopen", fmt.Sprint(prNumber), "-R", pr.GetRepoNameWithOwner()),
 		Section:      section,
 		StartText:    fmt.Sprintf("Reopening PR #%d", prNumber),
 		FinishedText: fmt.Sprintf("PR #%d has been reopened", prNumber),
@@ -122,14 +118,8 @@ func ReopenPR(ctx *context.ProgramContext, section SectionIdentifier, pr domain.
 func ClosePR(ctx *context.ProgramContext, section SectionIdentifier, pr domain.WorkItem) tea.Cmd {
 	prNumber := pr.GetNumber()
 	return fireTask(ctx, GitHubTask{
-		Id: buildTaskId("pr_close", prNumber),
-		Args: []string{
-			"pr",
-			"close",
-			fmt.Sprint(prNumber),
-			"-R",
-			pr.GetRepoNameWithOwner(),
-		},
+		Id:           buildTaskId("pr_close", prNumber),
+		Command:      ghcli.CommandForItem(ctx, pr, "pr", "close", fmt.Sprint(prNumber), "-R", pr.GetRepoNameWithOwner()),
 		Section:      section,
 		StartText:    fmt.Sprintf("Closing PR #%d", prNumber),
 		FinishedText: fmt.Sprintf("PR #%d has been closed", prNumber),
@@ -146,14 +136,8 @@ func ClosePR(ctx *context.ProgramContext, section SectionIdentifier, pr domain.W
 func PRReady(ctx *context.ProgramContext, section SectionIdentifier, pr domain.WorkItem) tea.Cmd {
 	prNumber := pr.GetNumber()
 	return fireTask(ctx, GitHubTask{
-		Id: buildTaskId("pr_ready", prNumber),
-		Args: []string{
-			"pr",
-			"ready",
-			fmt.Sprint(prNumber),
-			"-R",
-			pr.GetRepoNameWithOwner(),
-		},
+		Id:           buildTaskId("pr_ready", prNumber),
+		Command:      ghcli.CommandForItem(ctx, pr, "pr", "ready", fmt.Sprint(prNumber), "-R", pr.GetRepoNameWithOwner()),
 		Section:      section,
 		StartText:    fmt.Sprintf("Marking PR #%d as ready for review", prNumber),
 		FinishedText: fmt.Sprintf("PR #%d has been marked as ready for review", prNumber),
@@ -169,14 +153,7 @@ func PRReady(ctx *context.ProgramContext, section SectionIdentifier, pr domain.W
 
 func MergePR(ctx *context.ProgramContext, section SectionIdentifier, pr domain.WorkItem) tea.Cmd {
 	prNumber := pr.GetNumber()
-	c := exec.Command(
-		"gh",
-		"pr",
-		"merge",
-		fmt.Sprint(prNumber),
-		"-R",
-		pr.GetRepoNameWithOwner(),
-	)
+	c := ghcli.CommandForItem(ctx, pr, "pr", "merge", fmt.Sprint(prNumber), "-R", pr.GetRepoNameWithOwner())
 
 	taskId := fmt.Sprintf("merge_%d", prNumber)
 	task := context.Task{
@@ -206,15 +183,7 @@ func MergePR(ctx *context.ProgramContext, section SectionIdentifier, pr domain.W
 }
 
 func CreatePR(ctx *context.ProgramContext, section SectionIdentifier, branchName string, title string) tea.Cmd {
-	c := exec.Command(
-		"gh",
-		"pr",
-		"create",
-		"--title",
-		title,
-		"-R",
-		ctx.RepoUrl,
-	)
+	c := ghcli.CommandForRepo(ctx, ctx.RepoUrl, "pr", "create", "--title", title, "-R", ctx.RepoUrl)
 
 	taskId := fmt.Sprintf("create_pr_%s", title)
 	task := context.Task{
@@ -242,14 +211,8 @@ func CreatePR(ctx *context.ProgramContext, section SectionIdentifier, branchName
 func UpdatePR(ctx *context.ProgramContext, section SectionIdentifier, pr domain.WorkItem) tea.Cmd {
 	prNumber := pr.GetNumber()
 	return fireTask(ctx, GitHubTask{
-		Id: buildTaskId("pr_update", prNumber),
-		Args: []string{
-			"pr",
-			"update-branch",
-			fmt.Sprint(prNumber),
-			"-R",
-			pr.GetRepoNameWithOwner(),
-		},
+		Id:           buildTaskId("pr_update", prNumber),
+		Command:      ghcli.CommandForItem(ctx, pr, "pr", "update-branch", fmt.Sprint(prNumber), "-R", pr.GetRepoNameWithOwner()),
 		Section:      section,
 		StartText:    fmt.Sprintf("Updating PR #%d", prNumber),
 		FinishedText: fmt.Sprintf("PR #%d has been updated", prNumber),

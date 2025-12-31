@@ -3,7 +3,6 @@ package prssection
 import (
 	"bytes"
 	"fmt"
-	"os/exec"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/log"
@@ -13,6 +12,7 @@ import (
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/tasks"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/constants"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/context"
+	"github.com/dlvhdr/gh-dash/v4/internal/tui/ghcli"
 )
 
 func (m *Model) watchChecks() tea.Cmd {
@@ -35,16 +35,7 @@ func (m *Model) watchChecks() tea.Cmd {
 	}
 	startCmd := m.Ctx.StartTask(task)
 	return tea.Batch(startCmd, func() tea.Msg {
-		c := exec.Command(
-			"gh",
-			"pr",
-			"checks",
-			"--watch",
-			"--fail-fast",
-			fmt.Sprint(m.GetCurrRow().GetNumber()),
-			"-R",
-			m.GetCurrRow().GetRepoNameWithOwner(),
-		)
+		c := ghcli.CommandForItem(m.Ctx, pr, "pr", "checks", "--watch", "--fail-fast", fmt.Sprint(pr.GetNumber()), "-R", pr.GetRepoNameWithOwner())
 
 		var outb, errb bytes.Buffer
 		c.Stdout = &outb

@@ -2,11 +2,11 @@ package issuessection
 
 import (
 	"fmt"
-	"os/exec"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/constants"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/context"
+	"github.com/dlvhdr/gh-dash/v4/internal/tui/ghcli"
 	"github.com/dlvhdr/gh-dash/v4/internal/utils"
 )
 
@@ -23,14 +23,7 @@ func (m *Model) reopen() tea.Cmd {
 	}
 	startCmd := m.Ctx.StartTask(task)
 	return tea.Batch(startCmd, func() tea.Msg {
-		c := exec.Command(
-			"gh",
-			"issue",
-			"reopen",
-			fmt.Sprint(m.GetCurrRow().GetNumber()),
-			"-R",
-			m.GetCurrRow().GetRepoNameWithOwner(),
-		)
+		c := ghcli.CommandForItem(m.Ctx, issue, "issue", "reopen", fmt.Sprint(issueNumber), "-R", issue.GetRepoNameWithOwner())
 
 		err := c.Run()
 		return constants.TaskFinishedMsg{

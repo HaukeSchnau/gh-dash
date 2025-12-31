@@ -2,7 +2,6 @@ package issueview
 
 import (
 	"fmt"
-	"os/exec"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/components/issuessection"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/constants"
 	"github.com/dlvhdr/gh-dash/v4/internal/tui/context"
+	"github.com/dlvhdr/gh-dash/v4/internal/tui/ghcli"
 )
 
 func (m *Model) assign(usernames []string) tea.Cmd {
@@ -38,7 +38,7 @@ func (m *Model) assign(usernames []string) tea.Cmd {
 
 	startCmd := m.ctx.StartTask(task)
 	return tea.Batch(startCmd, func() tea.Msg {
-		c := exec.Command("gh", commandArgs...)
+		c := ghcli.CommandForItem(m.ctx, issue, commandArgs...)
 
 		err := c.Run()
 		returnedAssignees := data.Assignees{Nodes: []data.Assignee{}}
